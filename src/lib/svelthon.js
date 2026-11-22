@@ -507,7 +507,7 @@ function tagged(code, key) {
 // A component written in Python says so when its module loads, before any
 // parent hands it a prop: a parent that holds it rather than imports it, by a
 // prop, a snippet's parameter or `<svelte:component>`, hands each prop to
-// `__pybridge.child`, which asks, and a server prepares the props before the
+// `__brycomp_pybridge.child`, which asks, and a server prepares the props before the
 // component's own script runs. It names itself through its own module, which is
 // the identity every importer holds, handed as a function read when a parent
 // asks, since Svelte sets `export default` last when it wraps the component for
@@ -533,9 +533,9 @@ const inModuleScript = (code, statement) => {
 
 const announcement = (filename) =>
     filename
-        ? `import __svelthon_self from ${JSON.stringify(SELF)};` +
-          `import { __pybridge as __svelthon_bridge } from 'svelthon/bridge';` +
-          `__svelthon_bridge.python(() => __svelthon_self);`
+        ? `import __brycomp_svelthon_self from ${JSON.stringify(SELF)};` +
+          `import { __brycomp_pybridge as __brycomp_svelthon_bridge } from 'svelthon/bridge';` +
+          `__brycomp_svelthon_bridge.python(() => __brycomp_svelthon_self);`
         : '';
 
 // The getters of the names the `<script module>` binds, in that script's own
@@ -552,7 +552,7 @@ const moduleReaders = (names, held) =>
 // the component binds `derived`, and every `$derived` Svelthon writes for the
 // author stopped the compile (`store_invalid_subscription`). The export keeps
 // its name, and Python reads the variable (`moduleReaders`). A variable the
-// script's text names nowhere: `__svelthon_state` declared in a function of the
+// script's text names nowhere: `__brycomp_svelthon_state` declared in a function of the
 // author's took there the reads of the module's `state`.
 const heldRunes = (code, names) => {
     const named = new Set(moduleScript(code)?.match(/[\p{ID_Start}$_][\p{ID_Continue}$‌‍]*/gu));
@@ -561,7 +561,7 @@ const heldRunes = (code, names) => {
         names
             .filter((name) => RUNES.includes(name))
             .map((name) => {
-                let held = `__svelthon_${name}`;
+                let held = `__brycomp_svelthon_${name}`;
 
                 while (named.has(held)) held += '_';
 
@@ -628,7 +628,7 @@ function holdRunes(code, aliases) {
     // A function or a class with no name of its own, evaluated for a binding
     // held under another variable: named there after the binding as written,
     // by the bridge, which hands it back. Behind its statement, an assignment
-    // left it `__svelthon_state`, and a default of a pattern as well. And one
+    // left it `__brycomp_svelthon_state`, and a default of a pattern as well. And one
     // behind what TypeScript erases, `(() => 1) as Handler`, named once erased.
     const namedHere = (id, value) => {
         let made = value;
@@ -640,7 +640,7 @@ function holdRunes(code, aliases) {
     };
     // A class named in a first static block, as JavaScript names it before
     // any of its own: behind it, a static field or block that read `this.name`
-    // read `__svelthon_state`, and a `static ['name']` was written over.
+    // read `__brycomp_svelthon_state`, and a `static ['name']` was written over.
     const namedFirst = (node, name) =>
         edits.push([node.body.start + 1, node.body.start + 1, `static { ${HOOKS_NAME}.named(this, ${JSON.stringify(name)}); }`]);
 
@@ -783,7 +783,7 @@ function holdRunes(code, aliases) {
 
     // And the name JavaScript gives a function or a class after the binding it
     // is declared under, which `.name` reads: `class state` was named
-    // `__svelthon_state`, and a registry keyed by it missed it. A function's
+    // `__brycomp_svelthon_state`, and a registry keyed by it missed it. A function's
     // given back at the top, where it is hoisted to, a class's in its first
     // static block. By the bridge the module imports for its hooks, whose name
     // is the plugin's, and which leaves a name the author's code gave
@@ -821,8 +821,8 @@ const ERASED_AROUND = new Set(['TSAsExpression', 'TSSatisfiesExpression', 'TSNon
 // `<script module>`, once, in a scope that holds no instance's data: laid down
 // by each instance, they were functions of its scope, which the runtime keeps,
 // and the last instance's props stayed alive once it was unmounted.
-const HOOKS_NAME = '__svelthon_hooks';
-const HOOKS = `import { __pybridge as ${HOOKS_NAME} } from 'svelthon/bridge';` + bridgeHooks(HOOKS_NAME).join('');
+const HOOKS_NAME = '__brycomp_svelthon_hooks';
+const HOOKS = `import { __brycomp_pybridge as ${HOOKS_NAME} } from 'svelthon/bridge';` + bridgeHooks(HOOKS_NAME).join('');
 
 // Whether a component's own file is written in Python.
 const pythonFile = (path) => pythonScript(readFileSync(path, 'utf8')) !== null;
@@ -1083,11 +1083,11 @@ export function python(options = {}) {
 
             // And whether it holds a child it does not import, which the page
             // tells Python's or JavaScript's as it runs (`relanguaged`).
-            if (filename) COMPILED_FROM.set(filename, { content, children: languages, holding: code.includes('__pybridge.child(') });
+            if (filename) COMPILED_FROM.set(filename, { content, children: languages, holding: code.includes('__brycomp_pybridge.child(') });
 
             // The expressions whose flag the markup reads, which the script
             // declares (`unmemoized`).
-            file.rereads = [...new Set(Array.from(code.matchAll(/\b__expr_reread\.(__expr_\w+)\b/g), (found) => found[1]))];
+            file.rereads = [...new Set(Array.from(code.matchAll(/\b__brycomp_expr_reread\.(__brycomp_expr_\w+)\b/g), (found) => found[1]))];
 
             const held = heldRunes(code, file.jsNames);
             const emitted = inModuleScript(
@@ -1697,18 +1697,18 @@ let transportKey;
 const transportWrapper = (real, server) =>
     [
         `export * from ${JSON.stringify(real)};`,
-        `import { init_transport as __kit } from ${JSON.stringify(real)};`,
-        `import { transport as __svelthon, applicationTransport as __application } from ${JSON.stringify(transportFile())};`,
+        `import { init_transport as __brycomp_kit } from ${JSON.stringify(real)};`,
+        `import { transport as __brycomp_svelthon, applicationTransport as __brycomp_application } from ${JSON.stringify(transportFile())};`,
         ...(server
             ? [
-                  `import { signed as __signed } from ${JSON.stringify(transportFile('transport-server.js'))};`,
-                  `import { building as __building } from '$app/environment';`,
-                  `import { getRequestEvent as __event } from '$app/server';`,
-                  `const __readingBack = () => { try { return __event().isRemoteRequest === false; } catch { return false; } };`,
-                  `const __python = __signed(__svelthon, ${JSON.stringify((transportKey ??= randomBytes(32).toString('hex')))}, () => __building, __readingBack);`,
-                  `export function init_transport(transport) { __application(transport); __kit({ ...__python, ...transport }); }`
+                  `import { signed as __brycomp_signed } from ${JSON.stringify(transportFile('transport-server.js'))};`,
+                  `import { building as __brycomp_building } from '$app/environment';`,
+                  `import { getRequestEvent as __brycomp_event } from '$app/server';`,
+                  `const __brycomp_readingBack = () => { try { return __brycomp_event().isRemoteRequest === false; } catch { return false; } };`,
+                  `const __brycomp_python = __brycomp_signed(__brycomp_svelthon, ${JSON.stringify((transportKey ??= randomBytes(32).toString('hex')))}, () => __brycomp_building, __brycomp_readingBack);`,
+                  `export function init_transport(transport) { __brycomp_application(transport); __brycomp_kit({ ...__brycomp_python, ...transport }); }`
               ]
-            : [`export function init_transport(transport) { __kit({ ...__svelthon, ...transport }); }`])
+            : [`export function init_transport(transport) { __brycomp_kit({ ...__brycomp_svelthon, ...transport }); }`])
     ].join('\n');
 
 // What a `.remote.py` imports of `$app/server` on the server: SvelteKit's own,
@@ -1722,13 +1722,13 @@ const REMOTE_SERVER = '\0svelthon-remote-server?';
 const remoteServer = (real) =>
     [
         `export * from ${JSON.stringify(real)};`,
-        `import { query as __query, command as __command, form as __form, prerender as __prerender, getRequestEvent as __event } from ${JSON.stringify(real)};`,
-        `import { remoteHelper as __remote } from 'svelthon/bridge';`,
-        `const __inRemote = () => { try { return __event().isRemoteRequest === true; } catch { return false; } };`,
-        `export const query = __remote(__query, __inRemote);`,
-        `export const command = __remote(__command, __inRemote);`,
-        `export const form = __remote(__form, __inRemote);`,
-        `export const prerender = __remote(__prerender, __inRemote);`
+        `import { query as __brycomp_query, command as __brycomp_command, form as __brycomp_form, prerender as __brycomp_prerender, getRequestEvent as __brycomp_event } from ${JSON.stringify(real)};`,
+        `import { remoteHelper as __brycomp_remote } from 'svelthon/bridge';`,
+        `const __brycomp_inRemote = () => { try { return __brycomp_event().isRemoteRequest === true; } catch { return false; } };`,
+        `export const query = __brycomp_remote(__brycomp_query, __brycomp_inRemote);`,
+        `export const command = __brycomp_remote(__brycomp_command, __brycomp_inRemote);`,
+        `export const form = __brycomp_remote(__brycomp_form, __brycomp_inRemote);`,
+        `export const prerender = __brycomp_remote(__brycomp_prerender, __brycomp_inRemote);`
     ].join('\n');
 
 // A JavaScript server module's `load`, `+page.server.js` or `.ts`, wrapped by
@@ -1829,7 +1829,7 @@ function withServerLoad(code, id) {
             local = specifierName(one.local);
             edits.push([at(node), end(node), kept]);
         } else {
-            local = '__svelthon_route_load';
+            local = '__brycomp_svelthon_route_load';
             edits.push([at(node), end(node), `import { ${code.slice(at(one.local), end(one.local))} as ${local} }${from}; ${kept}`]);
         }
     }
@@ -1843,9 +1843,9 @@ function withServerLoad(code, id) {
 
     if (local === undefined && stars.length > 0) {
         STARRED.set(splitQuery(id)[0], stars);
-        appended.push(`import * as __svelthon_stars from ${JSON.stringify(splitQuery(id)[0] + STARS)};`);
-        local = '__svelthon_stars.load';
-        exported = `'load' in __svelthon_stars`;
+        appended.push(`import * as __brycomp_svelthon_stars from ${JSON.stringify(splitQuery(id)[0] + STARS)};`);
+        local = '__brycomp_svelthon_stars.load';
+        exported = `'load' in __brycomp_svelthon_stars`;
     }
 
     if (local === undefined) return undefined;
@@ -1854,14 +1854,14 @@ function withServerLoad(code, id) {
 
     for (const [start, stop, text] of edits.sort((a, b) => b[0] - a[0])) out = out.slice(0, start) + text + out.slice(stop);
 
-    const relayed = `__svelthon_liveLoad(() => ${local})`;
+    const relayed = `__brycomp_svelthon_liveLoad(() => ${local})`;
 
     return [
         out,
         ...appended,
-        `import { liveLoad as __svelthon_liveLoad } from ${JSON.stringify(transportFile())};`,
-        `const __svelthon_load = ${exported === undefined ? relayed : `${exported} ? ${relayed} : undefined`};`,
-        `export { __svelthon_load as load };`
+        `import { liveLoad as __brycomp_svelthon_liveLoad } from ${JSON.stringify(transportFile())};`,
+        `const __brycomp_svelthon_load = ${exported === undefined ? relayed : `${exported} ? ${relayed} : undefined`};`,
+        `export { __brycomp_svelthon_load as load };`
     ].join('\n');
 }
 
@@ -1880,8 +1880,8 @@ const withPythonTransport = (code, id) => {
     // The application's own, known from here: the data the page was rendered
     // with is decoded as the manifest loads, before SvelteKit starts it.
     return (
-        `import { transport as __svelthon_transport, applicationTransport as __svelthon_application } from ${JSON.stringify(transportFile())};\n` +
-        code.replace(MANIFEST_TRANSPORT, (_, before) => `transport: __svelthon_application({ ...__svelthon_transport, ...(${before}{}) })\n`)
+        `import { transport as __brycomp_svelthon_transport, applicationTransport as __brycomp_svelthon_application } from ${JSON.stringify(transportFile())};\n` +
+        code.replace(MANIFEST_TRANSPORT, (_, before) => `transport: __brycomp_svelthon_application({ ...__brycomp_svelthon_transport, ...(${before}{}) })\n`)
     );
 };
 
@@ -2411,7 +2411,7 @@ export function svelthon(options = {}) {
         enforce: 'pre',
         // Svelthon transformed for the server, as vite-plugin-svelte declares
         // Svelte and `esm-env`: the bridge tells a server from a browser by the
-        // conditions it is resolved under (`__pybridge.browser`), and a package
+        // conditions it is resolved under (`__brycomp_pybridge.browser`), and a package
         // left to Node is resolved under none, where `esm-env` reads a
         // `window`. Installed from npm, a server with a DOM on its global was a
         // browser again; a linked checkout, which Vite transforms, was not.
@@ -2593,7 +2593,7 @@ export function svelthon(options = {}) {
         //
         // A child a Python parent holds rather than imports, `<Child …/>` of a
         // prop, is told Python's or JavaScript's as the page runs, by the
-        // component it is (`__pybridge.child`), and Svelte's HMR keeps that
+        // component it is (`__brycomp_pybridge.child`), and Svelte's HMR keeps that
         // component across an edit while running what the file now is. So a
         // file that changes language reloads the page where such a parent is
         // compiled, as one imported recompiles its parents (`relanguaged`): a

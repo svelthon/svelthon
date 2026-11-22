@@ -61,7 +61,7 @@ const handedLate = (body) => {
 
     pythonExpressions(markup, collector(defs), undefined, { filename: 'Line.svelte', content: markup, offset: 0, runs });
 
-    return defs.map((one) => /^def __expr_\w*_late\(/.test(one));
+    return defs.map((one) => /^def __brycomp_expr_\w*_late\(/.test(one));
 };
 
 test.for([

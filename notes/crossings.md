@@ -22,8 +22,8 @@ same crossing seen from two places.
 | Python → JavaScript | a module or route function returns | `plainData` | walks containers and instances into plain JavaScript; a coroutine becomes a promise; `__dict__` fields only, never a `@property` |
 | Python → JavaScript | a template expression returns to a directive or an attribute | `pyNumbers` | shallow: unboxes floats and wraps callbacks so a `tick(0.5, …)` survives its first fractional frame |
 | Python → JavaScript | a component function is read as a value | `pyEvent` / `pyHandler` | trims the call to the arity Python declared, converts the arguments, names the file in any error |
-| Python → JavaScript | a value is written to a DOM attribute or a `bind:` | `__pybridge.bound` | `None` becomes `undefined`, so Svelte drops the attribute instead of writing the word |
-| Python → JavaScript | a dict is spread into props | `__pybridge.spread` | a shallow copy, or Svelte diffs a mutated dict against itself and writes nothing |
+| Python → JavaScript | a value is written to a DOM attribute or a `bind:` | `__brycomp_pybridge.bound` | `None` becomes `undefined`, so Svelte drops the attribute instead of writing the word |
+| Python → JavaScript | a dict is spread into props | `__brycomp_pybridge.spread` | a shallow copy, or Svelte diffs a mutated dict against itself and writes nothing |
 | JavaScript → Python | a framework event reaches `load`, an action, `+server.py` | `pyArg` | a real dict with `params`, `query`, `url`, `method`, `route`, plus `js` for the rest |
 | JavaScript → Python | anything else the framework hands over | `pyData` | `jsobj2pyobj`, then `to_dict` when there is one — idempotent, so a value that never left comes back unchanged |
 | JavaScript → Python | a JSON string | `from_json` | `pyData` with the parse attached |

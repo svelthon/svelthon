@@ -8,7 +8,7 @@
 // Counted rather than timed: the key of a keyed block runs for every row at each
 // run of the block, which makes those runs visible, and the witness is the same
 // markup in Svelte. Svelthon reads one key more per row a change was made in,
-// to tell whether it moved (`__pybridge.walk`), where Svelte's key reads
+// to tell whether it moved (`__brycomp_pybridge.walk`), where Svelte's key reads
 // the one field it names.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';

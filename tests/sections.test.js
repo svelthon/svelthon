@@ -43,16 +43,16 @@ describe('the order the sections are assembled in', () => {
     test('every name the author declared is bound', () => {
         // The rest of this file compares positions, and a position of -1 would
         // quietly satisfy "comes first". This is what stops that.
-        for (const one of DECLARED) expect(script).toContain(`bind(__proto, '${one}',`);
-        expect(script).toContain(`init(__py);`);
+        for (const one of DECLARED) expect(script).toContain(`bind(__brycomp_proto, '${one}',`);
+        expect(script).toContain(`init(__brycomp_py);`);
     });
 
     test('the injections bind after the author’s names, so they cannot take one', () => {
         const author = Math.max(
-            ...positions(script, DECLARED.map((one) => `bind(__proto, '${one}',`))
+            ...positions(script, DECLARED.map((one) => `bind(__brycomp_proto, '${one}',`))
         );
 
-        const injected = INJECTED.map((one) => script.indexOf(`bind(__proto, '${one.name}',`))
+        const injected = INJECTED.map((one) => script.indexOf(`bind(__brycomp_proto, '${one.name}',`))
             .filter((at) => at !== -1);
 
         // Not a handful: the whole injected table lands after the last of them.
@@ -61,24 +61,24 @@ describe('the order the sections are assembled in', () => {
     });
 
     test('init() comes after every binding, since it is what fills them', () => {
-        const last = script.lastIndexOf('bind(__proto, ');
+        const last = script.lastIndexOf('bind(__brycomp_proto, ');
 
-        expect(script.indexOf('init(__py);')).toBeGreaterThan(last);
+        expect(script.indexOf('init(__brycomp_py);')).toBeGreaterThan(last);
     });
 
     test('the exported wrappers come after init(), so they call something', () => {
-        const init = script.indexOf('init(__py);');
+        const init = script.indexOf('init(__brycomp_py);');
 
-        // `__pyComponent`, and not a wrapper written out by the compiler: the
+        // `__brycomp_pyComponent`, and not a wrapper written out by the compiler: the
         // three call boundaries are one file's business now, so a rule added to
         // one of them can reach this one.
-        expect(script.indexOf('const bump = __pyComponent(')).toBeGreaterThan(init);
-        expect(script.indexOf('export { __api_focus as focus };')).toBeGreaterThan(init);
+        expect(script.indexOf('const bump = __brycomp_pyComponent(')).toBeGreaterThan(init);
+        expect(script.indexOf('export { __brycomp_api_focus as focus };')).toBeGreaterThan(init);
     });
 
     test('the effects come last, since an effect runs its body on creation', () => {
         const wrappers = Math.max(
-            ...positions(script, ['const bump = __pyComponent(', 'export { __api_focus as focus };'])
+            ...positions(script, ['const bump = __brycomp_pyComponent(', 'export { __brycomp_api_focus as focus };'])
         );
 
         expect(script.indexOf('$effect(() => {')).toBeGreaterThan(wrappers);
@@ -97,10 +97,10 @@ describe('and in a plain module', () => {
 
     test('the injections bind after the author’s names', () => {
         const author = Math.max(
-            ...positions(script, [`bind(__proto, 'TITLE',`, `bind(__proto, 'load',`])
+            ...positions(script, [`bind(__brycomp_proto, 'TITLE',`, `bind(__brycomp_proto, 'load',`])
         );
 
-        const injected = INJECTED.map((one) => script.indexOf(`bind(__proto, '${one.name}',`))
+        const injected = INJECTED.map((one) => script.indexOf(`bind(__brycomp_proto, '${one.name}',`))
             .filter((at) => at !== -1);
 
         expect(injected.length).toBeGreaterThan(10);
@@ -108,10 +108,10 @@ describe('and in a plain module', () => {
     });
 
     test('init() comes after every binding, and the exports are filled after init()', () => {
-        const init = script.indexOf('init(__py);');
+        const init = script.indexOf('init(__brycomp_py);');
 
-        expect(init).toBeGreaterThan(script.lastIndexOf('bind(__proto, '));
-        // `__pyExport`, and not a boundary written out here: the wrapper a
+        expect(init).toBeGreaterThan(script.lastIndexOf('bind(__brycomp_proto, '));
+        // `__brycomp_pyExport`, and not a boundary written out here: the wrapper a
         // module's functions get is the runtime's own, `pyHandler`'s, so a rule
         // added to it holds on this route too. It was spelled out inline, and a
         // callback returned by one of these functions then crossed with no
@@ -120,9 +120,9 @@ describe('and in a plain module', () => {
         // The `export` statement is a declaration, wherever it stands; what
         // runs in order is the function that runs the body when the module is
         // imported, the last thing in the file.
-        expect(script.indexOf('__export_load = __pyExport(')).toBeGreaterThan(init);
-        expect(script).toContain('export { __export_load as load };');
-        const load = script.indexOf('export default __pythonModule(__py, "route", (__next) => { __py = __next; }, () => {');
+        expect(script.indexOf('__brycomp_export_load = __brycomp_pyExport(')).toBeGreaterThan(init);
+        expect(script).toContain('export { __brycomp_export_load as load };');
+        const load = script.indexOf('export default __brycomp_pythonModule(__brycomp_py, "route", (__brycomp_next) => { __brycomp_py = __brycomp_next; }, () => {');
 
         expect(load).toBeGreaterThan(script.lastIndexOf('export {'));
         expect(init).toBeGreaterThan(load);

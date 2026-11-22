@@ -38,7 +38,7 @@ describe('the arguments of a {@render} are the ones Python reads', () => {
         // read by a function of its own, which is no argument.
         const call = rewrite(`{@render item(${written})}`).match(/\[[^\]]*\]\)\((.*)\)\}$/)[1];
 
-        expect(call.match(/__expr_py_\d+\(\)/g)).toHaveLength(count);
+        expect(call.match(/__brycomp_expr_py_\d+\(\)/g)).toHaveLength(count);
     });
 });
 

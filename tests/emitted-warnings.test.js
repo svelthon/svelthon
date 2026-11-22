@@ -4,7 +4,7 @@
 // looked at. The suite printed a warning of our own on every build:
 //
 //   InspectWith.svelte:70:54 This reference only captures the initial value of
-//   `__fn___inspect_0`. Did you mean to reference it inside a closure instead?
+//   `__brycomp_fn___brycomp_inspect_0`. Did you mean to reference it inside a closure instead?
 //
 // The file is 31 lines long. The position is a line of the emitted script, so an
 // author reading their terminal is sent past the end of their own file, to an
@@ -103,7 +103,7 @@ describe('the script the compiler emits', () => {
     // compiled to module-scope runes and then by `compileModule`, under the
     // `.svelte.js` identity the plugin serves it with. Its named exports read
     // the function cells at the top of the module, and every store printed
-    // `state_referenced_locally` about a `__fn_` name its author never typed.
+    // `state_referenced_locally` about a `__brycomp_fn_` name its author never typed.
     test('and no store fixture warns when Svelte compiles it as a module', () => {
         const warned = [];
 

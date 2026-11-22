@@ -118,7 +118,7 @@ test.for([
 // what the field is unpacked from.
 test('binding a field an {#each} unpacks is refused, as Svelte refuses it', () => {
     let n = 0;
-    const collect = () => `__expr_${n++}`;
+    const collect = () => `__brycomp_expr_${n++}`;
 
     const native = '<script>let { rows } = $props();</script>{#each rows as {value}}<input bind:value={value}>{/each}';
 

@@ -1,6 +1,6 @@
 // A name in a `<script module>` is a **binding**, not a value.
 //
-// The compiler took `__jsCall(name)` once into a `const` and handed that back
+// The compiler took `__brycomp_jsCall(name)` once into a `const` and handed that back
 // for ever, so `let amount = 1` reached Python as `1` after the JavaScript had
 // moved on. And not only where reactivity was in question, which is the part
 // that makes it a defect rather than a policy: a Python function that **asked

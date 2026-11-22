@@ -4,7 +4,7 @@
 // another host. What only Svelte's internals could answer is written by the
 // compiler, in runes, into the scripts Svelte compiles: `$effect.tracking()`,
 // handed to the runtime as a component or store loads, and the derived and the
-// effect an `{#each}` walks with (`__collection`). The first was imported as
+// effect an `{#each}` walks with (`__brycomp_collection`). The first was imported as
 // `effect_tracking`, from `svelte/internal/client`, which no semver covers.
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';

@@ -2,7 +2,7 @@
 // as Python reads one between any two tokens: between the name and its `:=`,
 // one hid the walrus, which was then refused as written outside a handler;
 // after the value, one took the parenthesis the rewrite closed with,
-// `__assign("count", 7 # note)`, and the component did not compile. A `#`
+// `__brycomp_assign("count", 7 # note)`, and the component did not compile. A `#`
 // inside a string is the string's.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';

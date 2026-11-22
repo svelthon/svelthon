@@ -34,16 +34,16 @@ import { parse } from 'svelte/compiler';
 // A Python expression that calls nothing, as the markup reads it: from its
 // derived, or afresh once it has read JavaScript's own data (`unmemoized`),
 // written between `before` and `after`.
-const READ = String.raw`\(__expr_reread\.(__expr_\w+) \? \1_read\.value : \1_memo\)`;
+const READ = String.raw`\(__brycomp_expr_reread\.(__brycomp_expr_\w+) \? \1_read\.value : \1_memo\)`;
 const read = (before, after = '') => new RegExp(`${before}${READ}${after}`);
 
 // And a prop handed to a component, a name or a member, through a getter made
 // once beside the derived it reads, and telling a Python child its parent is
 // Python.
 const handed = (name) =>
-    `{const ${name}_memo = $derived(__pybridge.reading(__expr_reread, '${name}', () => ${name}()))}` +
+    `{const ${name}_memo = $derived(__brycomp_pybridge.reading(__brycomp_expr_reread, '${name}', () => ${name}()))}` +
     `{const ${name}_read = { expression: () => ${name}(), held: () => ${name}_memo, get value() { return ` +
-    `__pybridge.handed(__expr_reread.${name} ? __pybridge.reading(__expr_reread, '${name}', this.expression, this.held) : ${name}_memo); } }}`;
+    `__brycomp_pybridge.handed(__brycomp_expr_reread.${name} ? __brycomp_pybridge.reading(__brycomp_expr_reread, '${name}', this.expression, this.held) : ${name}_memo); } }}`;
 
 // `(x := 1)` in a template writes the component's name through the namespace,
 // which is what makes it reach the signal. Python's own grammar forces the
@@ -56,7 +56,7 @@ describe('the walrus', () => {
     // first — so the table is the test rather than a script beside it.
     test.for([
         // The form svelte.dev uses, and the one the documentation shows.
-        ['lambda: (count := count + 1)', 'lambda: __assign("count", count + 1)'],
+        ['lambda: (count := count + 1)', 'lambda: __brycomp_assign("count", count + 1)'],
 
         // Several names at once. Python has no comma operator, so this is a
         // *tuple* whose elements assign — and it stays one. The parentheses are
@@ -64,28 +64,28 @@ describe('the walrus', () => {
         // author no new syntax.
         [
             'lambda: (a := 1, b := 2)',
-            'lambda: (__assign("a", 1), __assign("b", 2))'
+            'lambda: (__brycomp_assign("a", 1), __brycomp_assign("b", 2))'
         ],
         [
             'lambda: (a := 1, b := 2, c := 3)',
-            'lambda: (__assign("a", 1), __assign("b", 2), __assign("c", 3))'
+            'lambda: (__brycomp_assign("a", 1), __brycomp_assign("b", 2), __brycomp_assign("c", 3))'
         ],
 
         // Only some elements assign; the others cross untouched.
-        ['lambda: (x + 1, a := 2)', 'lambda: (x + 1, __assign("a", 2))'],
+        ['lambda: (x + 1, a := 2)', 'lambda: (x + 1, __brycomp_assign("a", 2))'],
 
-        ['lambda: (a := (b := 2))', 'lambda: __assign("a", __assign("b", 2))'],
-        ['lambda: (x + (y := 2))', 'lambda: (x + __assign("y", 2))'],
+        ['lambda: (a := (b := 2))', 'lambda: __brycomp_assign("a", __brycomp_assign("b", 2))'],
+        ['lambda: (x + (y := 2))', 'lambda: (x + __brycomp_assign("y", 2))'],
         [
             'lambda: ((a := 1) if c else (b := 2))',
-            'lambda: (__assign("a", 1) if c else __assign("b", 2))'
+            'lambda: (__brycomp_assign("a", 1) if c else __brycomp_assign("b", 2))'
         ],
-        ['lambda: ((a := 1), f(2))', 'lambda: (__assign("a", 1), f(2))'],
+        ['lambda: ((a := 1), f(2))', 'lambda: (__brycomp_assign("a", 1), f(2))'],
 
         // The value may hold anything, including what would look like a
         // separator: the split is made at depth zero.
-        ['lambda: (a := f(1, 2))', 'lambda: __assign("a", f(1, 2))'],
-        ['lambda: (a := (1, 2))', 'lambda: __assign("a", (1, 2))'],
+        ['lambda: (a := f(1, 2))', 'lambda: __brycomp_assign("a", f(1, 2))'],
+        ['lambda: (a := (1, 2))', 'lambda: __brycomp_assign("a", (1, 2))'],
 
         // A call's own parenthesis belongs to the callee. Consuming it rewrote
         // `f(x := 1)` as `f__assign("x", 1)` — a call to a name that does not
@@ -95,13 +95,13 @@ describe('the walrus', () => {
         ['items[0](x := 1)', 'items[0](x := 1)'],
 
         // Doubling the parentheses is what asks for the assignment.
-        ['f((x := 1))', 'f(__assign("x", 1))'],
-        ['f(key=(x := 1))', 'f(key=__assign("x", 1))'],
-        ['d[(a := 1)]', 'd[__assign("a", 1)]'],
-        ['{(a := 1): 2}', '{__assign("a", 1): 2}'],
+        ['f((x := 1))', 'f(__brycomp_assign("x", 1))'],
+        ['f(key=(x := 1))', 'f(key=__brycomp_assign("x", 1))'],
+        ['d[(a := 1)]', 'd[__brycomp_assign("a", 1)]'],
+        ['{(a := 1): 2}', '{__brycomp_assign("a", 1): 2}'],
         [
             'sorted(items, key=lambda i: (n := i))',
-            'sorted(items, key=lambda i: __assign("n", i))'
+            'sorted(items, key=lambda i: __brycomp_assign("n", i))'
         ],
 
         // A string is opaque, which is what keeps a template from rewriting
@@ -119,7 +119,7 @@ describe('the walrus', () => {
     // whether the word is a keyword.
     //
     // This used to read the last character alone, take the space for "nothing
-    // callable here", and rewrite `f (x := 1)` into `f __assign("x", 1)`, which
+    // callable here", and rewrite `f (x := 1)` into `f __brycomp_assign("x", 1)`, which
     // is a syntax error on a line the author never wrote. It was recorded here
     // as a known limit, on the grounds that telling the two apart would take a
     // keyword table. It took one regex.
@@ -129,15 +129,15 @@ describe('the walrus', () => {
             // call consumes, so nothing is rewritten.
             ['f (x := 1)', 'f (x := 1)'],
             ['items[0] (x := 1)', 'items[0] (x := 1)'],
-            ['toggle ((open := not open))', 'toggle (__assign("open", not open))'],
+            ['toggle ((open := not open))', 'toggle (__brycomp_assign("open", not open))'],
 
             // A keyword cannot be called, so the parenthesis after one is a
             // group whatever the spacing.
-            ['not (open := True)', 'not __assign("open", True)'],
-            ['a and (x := 1)', 'a and __assign("x", 1)'],
-            ['1 if (x := 2) else 0', '1 if __assign("x", 2) else 0'],
-            ['return (x := 1)', 'return __assign("x", 1)'],
-            ['lambda: (x := 1)', 'lambda: __assign("x", 1)'],
+            ['not (open := True)', 'not __brycomp_assign("open", True)'],
+            ['a and (x := 1)', 'a and __brycomp_assign("x", 1)'],
+            ['1 if (x := 2) else 0', '1 if __brycomp_assign("x", 2) else 0'],
+            ['return (x := 1)', 'return __brycomp_assign("x", 1)'],
+            ['lambda: (x := 1)', 'lambda: __brycomp_assign("x", 1)'],
 
             // And a word that merely ends in a keyword is not one.
             ['isnot (x := 1)', 'isnot (x := 1)'],
@@ -148,7 +148,7 @@ describe('the walrus', () => {
     // A string is opaque by design, the rule that protects `"(a := 1)"`. An
     // f-string's fields are code, and a walrus there writes as anywhere else.
     test('a walrus inside an f-string field is rewritten, not one inside a string', () => {
-        expect(walrus('f"{(a := 1)}"')).toBe('f"{__assign("a", 1)}"');
+        expect(walrus('f"{(a := 1)}"')).toBe('f"{__brycomp_assign("a", 1)}"');
         expect(walrus('"{(a := 1)}"')).toBe('"{(a := 1)}"');
     });
 });
@@ -200,7 +200,7 @@ describe('overMarkup walks the markup and nothing else', () => {
     // it — its own parser fixture is named `whitespace-after-style-tag`. The
     // pattern required the tag to end immediately, so a block closed that way
     // stayed open and its body was walked as markup: the CSS rule below lost its
-    // declaration to `{__expr_0()}`, and a Python block closed the same way was
+    // declaration to `{__brycomp_expr_0()}`, and a Python block closed the same way was
     // never handed to the script hook at all.
     test('a closing tag may hold whitespace before its bracket', () => {
         const spaced = [
@@ -248,8 +248,8 @@ describe('the collector', () => {
         const defs = [];
         const collect = collector(defs);
 
-        expect(collect('count', null, [])).toBe('__expr_0');
-        expect(collect('other', null, [])).toBe('__expr_1');
+        expect(collect('count', null, [])).toBe('__brycomp_expr_0');
+        expect(collect('other', null, [])).toBe('__brycomp_expr_1');
         expect(defs).toHaveLength(2);
     });
 
@@ -257,8 +257,8 @@ describe('the collector', () => {
         const defs = [];
         const collect = collector(defs);
 
-        expect(collect('count', null, [])).toBe('__expr_0');
-        expect(collect('count', null, [])).toBe('__expr_0');
+        expect(collect('count', null, [])).toBe('__brycomp_expr_0');
+        expect(collect('count', null, [])).toBe('__brycomp_expr_0');
         expect(defs).toHaveLength(1);
     });
 
@@ -281,7 +281,7 @@ describe('the collector', () => {
         collect('it', null, ['it']);
 
         expect(defs).toHaveLength(2);
-        expect(defs[1]).toContain('def __expr_1(it):');
+        expect(defs[1]).toContain('def __brycomp_expr_1(it):');
     });
 
     // A binding writes back. A module-level name assigned inside a function is
@@ -290,7 +290,7 @@ describe('the collector', () => {
         const defs = [];
         const collect = collector(defs);
 
-        expect(collect('count', null, [], true)).toBe('__expr_set_0');
+        expect(collect('count', null, [], true)).toBe('__brycomp_expr_set_0');
         expect(defs[0]).toContain('global count');
     });
 
@@ -313,7 +313,7 @@ describe('the collector', () => {
     // keep it between parentheses, where Python allows that too.
     test.for([
         ['a read without a wrapper', 'lambda:\n    go()', null, false],
-        ['a read with a wrapper', 'count +\n    1', '__text', false],
+        ['a read with a wrapper', 'count +\n    1', '__brycomp_text', false],
         ['a write', 'row\n    .label', null, true]
     ])('%s keeps its line continuation', ([, written, wrapper, assign]) => {
         const defs = [];
@@ -640,17 +640,17 @@ describe('pythonExpressions', () => {
     // at the markup's end.
     test('an interpolation becomes a call', () => {
         const { out, defs } = rewrite('<p>{count}</p>');
-        const fresh = "__pybridge.reading(__expr_reread, '__expr_0', () => __expr_0())";
-        const afresh = "__pybridge.reading(__expr_reread, '__expr_0', this.expression, this.held)";
+        const fresh = "__brycomp_pybridge.reading(__brycomp_expr_reread, '__brycomp_expr_0', () => __brycomp_expr_0())";
+        const afresh = "__brycomp_pybridge.reading(__brycomp_expr_reread, '__brycomp_expr_0', this.expression, this.held)";
 
-        // `__text` is the wrapper an interpolation gets: Python's str(), so a
+        // `__brycomp_text` is the wrapper an interpolation gets: Python's str(), so a
         // list renders `['a']` rather than JavaScript's `a`.
         expect(out).toBe(
-            '<p>{(__expr_reread.__expr_0 ? __expr_0_read.value : __expr_0_memo)}</p>' +
-                `{const __expr_0_memo = $derived(${fresh})}` +
-                `{const __expr_0_read = { expression: () => __expr_0(), held: () => __expr_0_memo, get value() { return ${afresh}; } }}`
+            '<p>{(__brycomp_expr_reread.__brycomp_expr_0 ? __brycomp_expr_0_read.value : __brycomp_expr_0_memo)}</p>' +
+                `{const __brycomp_expr_0_memo = $derived(${fresh})}` +
+                `{const __brycomp_expr_0_read = { expression: () => __brycomp_expr_0(), held: () => __brycomp_expr_0_memo, get value() { return ${afresh}; } }}`
         );
-        expect(defs[0]).toContain('return __text(count)');
+        expect(defs[0]).toContain('return __brycomp_text(count)');
     });
 
     test('a block keeps its syntax and rewrites only its expression', () => {
@@ -664,7 +664,7 @@ describe('pythonExpressions', () => {
         const { out, defs } = rewrite('{#each items as it}<li>{it}</li>{/each}');
 
         expect(out).toContain(' as it');
-        expect(defs.some((one) => one.startsWith('def __expr_1(it):'))).toBe(true);
+        expect(defs.some((one) => one.startsWith('def __brycomp_expr_1(it):'))).toBe(true);
     });
 
     test('text around the expressions is left alone', () => {
@@ -690,25 +690,25 @@ describe('the blocks that declare names', () => {
     test('{#each} with an index declares both names', () => {
         const { defs } = rewrite('{#each rows as row, i}<li>{row}{i}</li>{/each}');
 
-        expect(defs.some((one) => /^def __expr_\d+\(row\):/m.test(one))).toBe(true);
-        expect(defs.some((one) => /^def __expr_\d+\(i\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __brycomp_expr_\d+\(row\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __brycomp_expr_\d+\(i\):/m.test(one))).toBe(true);
         expect(rewrite('{#each rows as row, i}<li>{row * i}</li>{/each}').defs.some(
-            (one) => /^def __expr_\d+\(row, i\):/m.test(one)
+            (one) => /^def __brycomp_expr_\d+\(row, i\):/m.test(one)
         )).toBe(true);
     });
 
     test('{#each} keyed evaluates the key in the row’s scope', () => {
         const { out, defs } = rewrite('{#each rows as row (row.id)}<li>{row}</li>{/each}');
 
-        expect(out).toContain('(__rows_1.noted(__index_1, __expr_');
-        expect(defs.some((one) => one.includes('__key(row.id)'))).toBe(true);
+        expect(out).toContain('(__brycomp_rows_1.noted(__brycomp_index_1, __brycomp_expr_');
+        expect(defs.some((one) => one.includes('__brycomp_key(row.id)'))).toBe(true);
     });
 
     test('{#await} splits the promise from the name it declares', () => {
         const { out, defs } = rewrite('{#await later() then value}{value}{/await}');
 
-        expect(out).toMatch(/\{#await __expr_py_\d+\(\) then value\}/);
-        expect(defs.some((one) => /^def __expr_\d+\(value\):/m.test(one))).toBe(true);
+        expect(out).toMatch(/\{#await __brycomp_expr_py_\d+\(\) then value\}/);
+        expect(defs.some((one) => /^def __brycomp_expr_\d+\(value\):/m.test(one))).toBe(true);
     });
 
     // The split is made at depth zero, so a `then` inside the call's own string
@@ -716,7 +716,7 @@ describe('the blocks that declare names', () => {
     test('{#await} is not cut inside its own string', () => {
         const { out } = rewrite('{#await f(" then ")}waiting{/await}');
 
-        expect(out).toMatch(/^\{#await __expr_py_\d+\(\)\}waiting\{\/await\}$/);
+        expect(out).toMatch(/^\{#await __brycomp_expr_py_\d+\(\)\}waiting\{\/await\}$/);
     });
 
     test('{:then} and {:catch} cross unchanged', () => {
@@ -729,15 +729,15 @@ describe('the blocks that declare names', () => {
     test('{#snippet} declares its parameters and holds no expression', () => {
         const { out, defs } = rewrite('{#snippet row(item, index)}<li>{item}</li>{/snippet}');
 
-        expect(out).toContain('{#snippet row(__argument_0, __argument_1)}');
+        expect(out).toContain('{#snippet row(__brycomp_argument_0, __brycomp_argument_1)}');
         // A bare parameter reads its argument where it is read, as Svelte's
         // own does, and declares nothing.
-        expect(out).toContain('__pybridge.received(__pybridge.param(__argument_0, __snippet_0, 0))');
+        expect(out).toContain('__brycomp_pybridge.received(__brycomp_pybridge.param(__brycomp_argument_0, __brycomp_snippet_0, 0))');
         expect(out).not.toContain('{const item');
 
         // Its own name comes first: it lives in the scope that encloses the
         // block, and an enclosing scope reaches into it.
-        expect(defs.some((one) => /^def __expr_\d+(?:_late)?\(item\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __brycomp_expr_\d+(?:_late)?\(item\):/m.test(one))).toBe(true);
     });
 
     // `{x = e}` and `{y => e}` are the two signs the script already uses, put in
@@ -766,8 +766,8 @@ describe('the blocks that declare names', () => {
 
         // The declaration reads the block's name and not its own; the
         // interpolation after it reads the declaration and not the block's.
-        expect(defs.some((one) => /^def __expr_py_\d+\(row\):/m.test(one))).toBe(true);
-        expect(defs.some((one) => /^def __expr_\d+(?:_late)?\(half\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __brycomp_expr_py_\d+\(row\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __brycomp_expr_\d+(?:_late)?\(half\):/m.test(one))).toBe(true);
     });
 
     // The sign has to be an assignment, not a comparison or a keyword argument.
@@ -782,13 +782,13 @@ describe('the blocks that declare names', () => {
     // write would land on the parameter and die with the call. Svelte knows how
     // to write those, so the setter writes the name itself; the read still goes
     // through Python, since the cell holds a Python value. What it writes is
-    // followed as what the declaration put there is (`__pybridge.state`).
+    // followed as what the declaration put there is (`__brycomp_pybridge.state`).
     test('a bind: on a markup name is written by Svelte and read through Python', () => {
         expect(rewrite('{draft = name}<input bind:value={draft} />').out).toMatch(
-            /bind:value=\{__pybridge\.boundRead\(\(\) => __expr_scalar_\d+\(__follow\(draft\)\)\), \(__value\) => draft = __pybridge\.state\(__pyBind\(__value\)\)\}/
+            /bind:value=\{__brycomp_pybridge\.boundRead\(\(\) => __brycomp_expr_scalar_\d+\(__brycomp_follow\(draft\)\)\), \(__brycomp_value\) => draft = __brycomp_pybridge\.state\(__brycomp_pyBind\(__brycomp_value\)\)\}/
         );
         expect(rewrite('{value = ""}<input bind:value />').out).toContain(
-            '(__value) => value = __pybridge.state(__pyBind(__value))'
+            '(__brycomp_value) => value = __brycomp_pybridge.state(__brycomp_pyBind(__brycomp_value))'
         );
     });
 
@@ -797,15 +797,15 @@ describe('the blocks that declare names', () => {
     // runes mode, the pair's as it does the bare binding's.
     test('and so is one on a block s own alias', () => {
         expect(rewrite('{#each xs as row}<input bind:value={row} />{/each}').out).toContain(
-            '(__value) => row = __pybridge.state(__pyBind(__value))'
+            '(__brycomp_value) => row = __brycomp_pybridge.state(__brycomp_pyBind(__brycomp_value))'
         );
     });
 
     test('while a target the script owns keeps the pair', () => {
         const { out } = rewrite('<input bind:value={name} />');
 
-        expect(out).toContain('__expr_set_');
-        expect(rewrite('<input bind:value={obj.field} />').out).toContain('__expr_set_');
+        expect(out).toContain('__brycomp_expr_set_');
+        expect(rewrite('<input bind:value={obj.field} />').out).toContain('__brycomp_expr_set_');
     });
 
     // `:=` writes through the namespace, which holds the script's names and
@@ -816,11 +816,11 @@ describe('the blocks that declare names', () => {
             .toThrow(/declared by the markup/);
     });
 
-    // Only a write: the text `__assign("open"` in a string, or at the end of a
+    // Only a write: the text `__brycomp_assign("open"` in a string, or at the end of a
     // name, `record__assign("open", open)`, writes nothing, and the handler was
     // refused; a walrus in an f-string's field writes.
     test.for([
-        ['a string', `<button onclick={lambda: show('|__assign("open", 1)')}>x</button>`, false],
+        ['a string', `<button onclick={lambda: show('|__brycomp_assign("open", 1)')}>x</button>`, false],
         ['a name', '<button onclick={lambda: record__assign("open", open)}>x</button>', false],
         ['an f-string field', '<button onclick={lambda: show(f"{(open := 1)}")}>x</button>', true]
     ])('the text of a write to a markup name, in %s, is refused only where it writes', ([, handler, refused]) => {
@@ -832,14 +832,14 @@ describe('the blocks that declare names', () => {
 
     test('and still writes one the script owns', () => {
         expect(rewrite('<button onclick={(open := not open)}>x</button>').out).toContain(
-            '__event('
+            '__brycomp_event('
         );
     });
 
     test('{:else if} compiles its condition through truthy', () => {
         const { defs } = rewrite('{#if a}x{:else if b}y{/if}');
 
-        expect(defs.some((one) => one.includes('__truthy(b)'))).toBe(true);
+        expect(defs.some((one) => one.includes('__brycomp_truthy(b)'))).toBe(true);
     });
 
     test('{:else} alone crosses unchanged', () => {
@@ -858,7 +858,7 @@ describe('{@render}', () => {
     // An argument that calls nothing, handed inside a getter Svelte does not
     // look into, so it is read again at each read of its parameter, as
     // Svelte's own is; one that calls something is held as Svelte holds it.
-    const READ = String.raw`\(\{ get value\(\) \{ return __expr_py_\d+\(\); \} \}\)\.value`;
+    const READ = String.raw`\(\{ get value\(\) \{ return __brycomp_expr_py_\d+\(\); \} \}\)\.value`;
     const pattern = (text) => new RegExp(text.replaceAll('READ', READ));
 
     test('each argument is compiled separately', () => {
@@ -870,7 +870,7 @@ describe('{@render}', () => {
     test('a comma inside an argument is not a separator', () => {
         const { out, defs } = rewrite('{@render row(f(a, b))}');
 
-        expect(out).toMatch(/\(__expr_py_\d+\(\)\)\}$/);
+        expect(out).toMatch(/\(__brycomp_expr_py_\d+\(\)\)\}$/);
         expect(defs.some((one) => one.includes('f(a, b)'))).toBe(true);
     });
 
@@ -903,7 +903,7 @@ describe('{@render}', () => {
     test('a name the markup does not declare is decided by the snippet rendered', () => {
         const { out } = rewrite('{@render other?.(half)}');
 
-        expect(out).toMatch(pattern(String.raw`^\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\?\.\(READ\)\}$`));
+        expect(out).toMatch(pattern(String.raw`^\{@render __brycomp_pybridge\.snippet\(__brycomp_expr_py_\d+\(\), \[\]\)\?\.\(READ\)\}$`));
     });
 
     test('a name beside the markup snippets, or an attribute, is decided by the snippet rendered', () => {
@@ -911,7 +911,7 @@ describe('{@render}', () => {
 
         expect(out).toMatch(
             pattern(
-                String.raw`\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[row\]\)\?\.\(READ\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[row\]\)\(READ\)\}$`
+                String.raw`\{@render __brycomp_pybridge\.snippet\(__brycomp_expr_py_\d+\(\), \[row\]\)\?\.\(READ\)\}\{@render __brycomp_pybridge\.snippet\(__brycomp_expr_py_\d+\(\), \[row\]\)\(READ\)\}$`
             )
         );
     });
@@ -924,7 +924,7 @@ describe('{@render}', () => {
 
         expect(out).toMatch(
             pattern(
-                String.raw`^\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\(READ\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\(READ\)\}$`
+                String.raw`^\{@render __brycomp_pybridge\.snippet\(__brycomp_expr_py_\d+\(\), \[\]\)\(READ\)\}\{@render __brycomp_pybridge\.snippet\(__brycomp_expr_py_\d+\(\), \[\]\)\(READ\)\}$`
             )
         );
         expect(defs.some((one) => one.includes('pick(a, b)'))).toBe(true);
@@ -932,7 +932,7 @@ describe('{@render}', () => {
     });
 
     test('a snippet rendered without arguments is called with none', () => {
-        expect(rewrite('{@render row()}').out).toBe('{@render __pybridge.snippet(__expr_py_0(), [])()}');
+        expect(rewrite('{@render row()}').out).toBe('{@render __brycomp_pybridge.snippet(__brycomp_expr_py_0(), [])()}');
     });
 
     // A snippet this markup declares says it is Python's first of all, and only
@@ -944,7 +944,7 @@ describe('{@render}', () => {
         const { out } = rewrite('{#snippet row([x, z], y=1)}{y}{/snippet}');
 
         expect(out).toMatch(
-            /^\{#snippet row\(__argument_0, __argument_1\)\}\{let __snippet_0 = __pybridge\.pythonSnippet\(row\)\}\{const __unpacked_0 = \$derived\(__pybridge\.param\(__argument_0, __snippet_0, 0\)\)\}\{const __unpacked_1 = \$derived\(__pybridge\.positional\(__unpacked_0, 2\)\)\}\{const y = \$derived\(__pybridge\.param\(__argument_1, __snippet_0, 1, \(\) => __expr_lazy_\d+\(/
+            /^\{#snippet row\(__brycomp_argument_0, __brycomp_argument_1\)\}\{let __brycomp_snippet_0 = __brycomp_pybridge\.pythonSnippet\(row\)\}\{const __brycomp_unpacked_0 = \$derived\(__brycomp_pybridge\.param\(__brycomp_argument_0, __brycomp_snippet_0, 0\)\)\}\{const __brycomp_unpacked_1 = \$derived\(__brycomp_pybridge\.positional\(__brycomp_unpacked_0, 2\)\)\}\{const y = \$derived\(__brycomp_pybridge\.param\(__brycomp_argument_1, __brycomp_snippet_0, 1, \(\) => __brycomp_expr_lazy_\d+\(/
         );
     });
 
@@ -976,20 +976,20 @@ describe('the attribute pass', () => {
         const { out, defs } = rewrite('<p class="row {kind}">x</p>');
 
         expect(out).toMatch(read('class="row \\{', '\\}"'));
-        expect(defs[0]).toContain('__text(kind)');
+        expect(defs[0]).toContain('__brycomp_text(kind)');
     });
 
     // The value itself, not its rendering: `data-v={items}` must carry the list.
     test('a bare attribute value keeps the value', () => {
         const { defs } = rewrite('<p data-v={items}>x</p>');
 
-        expect(defs[0]).not.toContain('__text');
+        expect(defs[0]).not.toContain('__brycomp_text');
     });
 
     test('class: takes a condition, so it goes through truthy', () => {
         const { defs } = rewrite('<p class:active={current == "a"}>x</p>');
 
-        expect(defs.some((one) => one.includes('__truthy'))).toBe(true);
+        expect(defs.some((one) => one.includes('__brycomp_truthy'))).toBe(true);
     });
 
     // HTML lets an attribute follow a quoted value with no space, and Svelte's
@@ -997,9 +997,9 @@ describe('the attribute pass', () => {
     // class that did not exclude the quote, so `title="y"onclick` was the name
     // and matched no rule at all.
     test.for([
-        ['a handler', '<b title="y"onclick={go}>x</b>', /onclick=\{function \(\.\.\.\$\$args\) \{ __event\(/],
-        ['a binding', '<input title="y"bind:value={x}>', /bind:value=\{__pybridge\.boundRead\(\(\) =>/],
-        ['the shorthand', "<input title='y'bind:value>", /bind:value=\{__pybridge\.boundRead\(\(\) =>/],
+        ['a handler', '<b title="y"onclick={go}>x</b>', /onclick=\{function \(\.\.\.\$\$args\) \{ __brycomp_event\(/],
+        ['a binding', '<input title="y"bind:value={x}>', /bind:value=\{__brycomp_pybridge\.boundRead\(\(\) =>/],
+        ['the shorthand', "<input title='y'bind:value>", /bind:value=\{__brycomp_pybridge\.boundRead\(\(\) =>/],
         ['a class', '<b title="y"class:on={x}>x</b>', read('class:on=\\{', '\\}')]
     ])('%s keeps its rule with no space before it', ([, markup, shape]) => {
         expect(rewrite(markup).out).toMatch(shape);
@@ -1016,9 +1016,9 @@ describe('the attribute pass', () => {
     // shorthand expansion, which wrote `title= x={…}`. Svelte then answered
     // `Expected token >` about a token the author never typed.
     test.for([
-        ['a handler', '<b onclick= {go}>x</b>', /onclick= \{function \(\.\.\.\$\$args\) \{ __event\(/],
-        ['the colon spelling', '<b on:click= {go}>x</b>', /on:click= \{function \(\.\.\.\$\$args\) \{ __event\(/],
-        ['a binding', '<input bind:value= {x}>', /bind:value= \{__pybridge\.boundRead\(\(\) =>/],
+        ['a handler', '<b onclick= {go}>x</b>', /onclick= \{function \(\.\.\.\$\$args\) \{ __brycomp_event\(/],
+        ['the colon spelling', '<b on:click= {go}>x</b>', /on:click= \{function \(\.\.\.\$\$args\) \{ __brycomp_event\(/],
+        ['a binding', '<input bind:value= {x}>', /bind:value= \{__brycomp_pybridge\.boundRead\(\(\) =>/],
         ['a class', '<b class:on= {x}>x</b>', read('class:on= \\{', '\\}')],
         ['a plain attribute', '<b title= {x}>x</b>', read('title= \\{', '\\}')]
     ])('%s keeps its rule across a space after the =', ([, markup, shape]) => {
@@ -1041,7 +1041,7 @@ describe('the attribute pass', () => {
 
     // The other position. A spread fills a tag's attributes, so outside a tag
     // there is nothing for it to spread into, in either spelling. Left to fall
-    // through, `{**attrs}` reached Brython as `__text(**attrs)` and the author
+    // through, `{**attrs}` reached Brython as `__brycomp_text(**attrs)` and the author
     // read a syntax error about a missing comma, on a line they never wrote.
     test.for([['the Python spelling', '**'], ['the JavaScript one', '...']])(
         'a spread outside a tag is refused, in %s',
@@ -1065,7 +1065,7 @@ describe('the attribute pass', () => {
 
     test('a shorthand attribute keeps its name and gains a value', () => {
         expect(rewrite('<input {value} />').out).toMatch(read('value=\\{', '\\}'));
-        expect(rewrite('<input {value} />').out).toContain('__expr_scalar_');
+        expect(rewrite('<input {value} />').out).toContain('__brycomp_expr_scalar_');
     });
 
     // And it compiles to exactly what the long spelling does.
@@ -1102,7 +1102,7 @@ describe('the attribute pass', () => {
         // The binding is named as Python reads it, its tree, which the bare
         // spelling gives as `group` — its own name.
         const action =
-            /use:__group=\{\{ current: __expr_py_\d+\(\), write: \(__value\) => __expr_set_\d+\(__pyBind\(__value\)\), chosen: undefined, fielded: false, binding: "Name\(\\"(choix|group)\\",Load\(\)\)", scope: __py, where: \[\] \}\}/;
+            /use:__brycomp_group=\{\{ current: __brycomp_expr_py_\d+\(\), write: \(__brycomp_value\) => __brycomp_expr_set_\d+\(__brycomp_pyBind\(__brycomp_value\)\), chosen: undefined, fielded: false, binding: "Name\(\\"(choix|group)\\",Load\(\)\)", scope: __brycomp_py, where: \[\] \}\}/;
 
         expect(rewrite('<input bind:group={choix}>').out).toMatch(action);
         expect(rewrite('<input bind:group>').out).toMatch(action);
@@ -1121,7 +1121,7 @@ describe('the attribute pass', () => {
 
         // The same wrapper the quoted spelling gets: what is written beside text
         // is text, so Python's `str()` and not JavaScript's.
-        expect(defs.join('\n')).toContain('__text(variable)');
+        expect(defs.join('\n')).toContain('__brycomp_text(variable)');
     });
 
     // Every word of the argument for rewriting `bind:group` into an action is
@@ -1131,16 +1131,16 @@ describe('the attribute pass', () => {
     // `<svelte:self>` in a component written in Python is that component, and is
     // handed the Python value, a float as a float, as any Python child is.
     test('<svelte:self> is handed the Python values', () => {
-        expect(rewrite('<svelte:self value={x} />').out).toBe(`<svelte:self value={__expr_child_0_read.value} />${handed('__expr_child_0')}`);
+        expect(rewrite('<svelte:self value={x} />').out).toBe(`<svelte:self value={__brycomp_expr_child_0_read.value} />${handed('__brycomp_expr_child_0')}`);
     });
 
     test('bind:group on a component is a prop binding, not an action', () => {
-        const pair = /bind:group=\{__pybridge\.crossing\[__pybridge\.pair\(/;
+        const pair = /bind:group=\{__brycomp_pybridge\.crossing\[__brycomp_pybridge\.pair\(/;
 
         expect(rewrite('<Card bind:group={chosen} />').out).toMatch(pair);
-        expect(rewrite('<Card bind:group={chosen} />').out).not.toContain('use:__group');
+        expect(rewrite('<Card bind:group={chosen} />').out).not.toContain('use:__brycomp_group');
         expect(rewrite('<forms.Card bind:group={chosen} />').out).toMatch(pair);
-        expect(rewrite('<input bind:group={chosen}>').out).toContain('use:__group');
+        expect(rewrite('<input bind:group={chosen}>').out).toContain('use:__brycomp_group');
     });
 
     // Svelte refuses the read/write pair for a binding called `group` wherever
@@ -1159,10 +1159,10 @@ describe('the attribute pass', () => {
     // the node's. The value goes as Python's, which the group compares as
     // Python does.
     test('and takes the tag value with it', () => {
-        const served = /checked=\{__pybridge\.groupChecked\(\(\) => __expr_py_\d+\(\), \(\) => __expr_py_\d+\(\), (?:true|false)\)\}/;
+        const served = /checked=\{__brycomp_pybridge\.groupChecked\(\(\) => __brycomp_expr_py_\d+\(\), \(\) => __brycomp_expr_py_\d+\(\), (?:true|false)\)\}/;
         // The field's value a getter, which only Svelte's read of the action's
         // value evaluates.
-        const action = /use:__group=\{\{ .+, get chosen\(\) \{ return __expr_py_\d+\(\); \}, fielded: true, binding: "(?:[^"\\]|\\.)*", scope: __py, where: \[\] \}\}/;
+        const action = /use:__brycomp_group=\{\{ .+, get chosen\(\) \{ return __brycomp_expr_py_\d+\(\); \}, fielded: true, binding: "(?:[^"\\]|\\.)*", scope: __brycomp_py, where: \[\] \}\}/;
 
         for (const tag of [
             '<input bind:group={choix} value={n}>',
@@ -1176,14 +1176,14 @@ describe('the attribute pass', () => {
         }
 
         expect(rewrite('<input bind:group={choix} value="a">').out).toMatch(/, chosen: undefined, fielded: false, /);
-        expect(rewrite('<input bind:group={choix} value="a-{n}">').out).toMatch(/, get chosen\(\) \{ return "a-" \+ __expr_\d+\(\); \}, fielded: true, /);
+        expect(rewrite('<input bind:group={choix} value="a-{n}">').out).toMatch(/, get chosen\(\) \{ return "a-" \+ __brycomp_expr_\d+\(\); \}, fielded: true, /);
     });
 
     // Svelte reads `<svelte:options>` at compile time and requires literals, so
     // its values are configuration rather than expressions and stay untouched.
     // The quoted spelling always worked, having no braces to catch the eye; the
     // object form of `customElement`, which is how shadow mode and props are
-    // configured, came out as `customElement={__expr_0()}` and Svelte answered
+    // configured, came out as `customElement={__brycomp_expr_0()}` and Svelte answered
     // that it must be a string literal.
     test.for([
         ['<svelte:options runes={False} />'],
@@ -1211,14 +1211,14 @@ describe('the attribute pass', () => {
         const { out, defs } = rewrite('<input bind:value={name} />');
 
         expect(out).toContain('() =>');
-        expect(defs.some((one) => one.startsWith('def __expr_set_'))).toBe(true);
+        expect(defs.some((one) => one.startsWith('def __brycomp_expr_set_'))).toBe(true);
     });
 
     test('{@html} renders through Python’s str, a TrustedHTML aside', () => {
         const { out, defs } = rewrite('{@html markup_text}');
 
-        expect(out).toMatch(/\{@html __expr_\d+\(\)\}/);
-        expect(defs[0]).toContain('__html(markup_text)');
+        expect(out).toMatch(/\{@html __brycomp_expr_\d+\(\)\}/);
+        expect(defs[0]).toContain('__brycomp_html(markup_text)');
     });
 
     test('a comment is not scanned for expressions', () => {
@@ -1286,9 +1286,9 @@ describe('an unknown construct is refused, never passed through', () => {
     });
 
     // Svelte binds an identifier or a member, and Brython refused the setter
-    // written for the rest, `(c.upper()) = __value`, in code nobody wrote.
+    // written for the rest, `(c.upper()) = __brycomp_value`, in code nobody wrote.
     // And a tuple to unpack the value into, which Svelte refuses too: `(a, b) =
-    // __value` took two typed characters in silence.
+    // __brycomp_value` took two typed characters in silence.
     test.for([['a call', 'c.upper()'], ['a literal', '"text"'], ['an operation', 'a + b'], ['a tuple', 'a, b, c'], ['a list', '[a, b]']])(
         'a binding to %s is refused in the words the author wrote',
         ([, target]) => {
@@ -1301,7 +1301,7 @@ describe('an unknown construct is refused, never passed through', () => {
     // `bind:group` writes the group's list, and Svelte refuses a pair of
     // functions there (`bind_group_invalid_expression`). It compiled, and the
     // click unpacked the list into the pair, `ValueError`; a call or a literal
-    // was refused in the words of `(f()) = __value`.
+    // was refused in the words of `(f()) = __brycomp_value`.
     test.for([
         ['get, put', 'is a pair of functions, which Svelte refuses there'],
         ['f()', 'takes no write'],
@@ -1315,7 +1315,7 @@ describe('an unknown construct is refused, never passed through', () => {
     // Svelte 5 takes `{const a = n}` inside a block, its own spelling of
     // `{@const}`, and Svelthon's answer is the template rune `{a = n}`. The
     // keyword fell through to the generic interpolation, so the author read
-    // Brython's `invalid syntax` about `__text(const a = n)`, on a line nobody
+    // Brython's `invalid syntax` about `__brycomp_text(const a = n)`, on a line nobody
     // wrote. The `@`-prefixed form, Svelte's `{@const}`, names it too.
     // An assignment that is no declaration was compiled as an expression and
     // refused in the words of a text nobody wrote, `(a, b = 1, 2)`. A lambda's
@@ -1399,7 +1399,7 @@ describe('an unknown construct is refused, never passed through', () => {
 
     // A spread is an attribute of its own. Written as the *value* of a named one
     // it was refused in neither spelling: `title={**x}` reached Brython as an
-    // expression and `title="{**x}"` reached it as `__text(**x)`, so the author
+    // expression and `title="{**x}"` reached it as `__brycomp_text(**x)`, so the author
     // read a syntax error about a comma. Svelte refuses the bare form itself,
     // with `Unexpected token`, which names nothing they typed.
     test.for([
@@ -1509,7 +1509,7 @@ describe('an each block finds its separator', () => {
         ['a key', '{#each rows as row (row)}<p>{row}</p>{/each}', 'rows'],
         ['a destructuring', '{#each pairs as (k, v)}<p>{k}{v}</p>{/each}', 'pairs']
     ])('%s keeps the iterable whole', ([, markup, whole]) => {
-        expect(iterable(markup)).toContain(`return __seq(${whole})`);
+        expect(iterable(markup)).toContain(`return __brycomp_seq(${whole})`);
     });
 });
 
@@ -1519,25 +1519,25 @@ describe('a closing tag with nothing open', () => {
     const STRAY = '{#snippet row(one)}<b>{one}</b>{/snippet}{/if}<p>{row}</p>';
 
     test('does not take the snippet names down with it', () => {
-        expect(rewrite(STRAY)).toContain('__follow(row)');
+        expect(rewrite(STRAY)).toContain('__brycomp_follow(row)');
     });
 
     // Nor does a clause with no block open, which would start a branch of the
     // base scope, holding nothing.
     test.for([['{:else}'], ['{:then v}']])('nor does %s', ([clause]) => {
-        expect(rewrite(STRAY.replace('{/if}', clause))).toContain('__follow(row)');
+        expect(rewrite(STRAY.replace('{/if}', clause))).toContain('__brycomp_follow(row)');
     });
 
     // The control: without the stray tag the same markup says the same thing,
     // so the assertion above is about the pop and not about snippets.
     test('and the same markup without it reads the same', () => {
-        expect(rewrite(STRAY.replace('{/if}', ''))).toContain('__follow(row)');
+        expect(rewrite(STRAY.replace('{/if}', ''))).toContain('__brycomp_follow(row)');
     });
 });
 
 // **Which of the block's names an expression actually reads.**
 //
-// Each one is handed over as `__follow(name)`, which is what subscribes the
+// Each one is handed over as `__brycomp_follow(name)`, which is what subscribes the
 // block to it, and they were found by running a name pattern over the raw text.
 // Two kinds of word in an expression are not a reference — a word inside a
 // **string** or a comment, and the **attribute** after a dot — and both were
@@ -1570,20 +1570,20 @@ describe('the names handed to follow', () => {
     ])('%s', ([, expression, followed]) => {
         const out = rewrite(expression);
 
-        expect(out.includes('__follow(count)')).toBe(followed);
+        expect(out.includes('__brycomp_follow(count)')).toBe(followed);
     });
 
     // The witness the rows above need: the name is in scope throughout, so a
     // row answering `false` is saying *this expression does not read it*, not
     // *nothing declares it*.
     test('while the name is a binding of the block in every one of them', () => {
-        expect(rewrite('count')).toContain('__follow(count)');
+        expect(rewrite('count')).toContain('__brycomp_follow(count)');
     });
 
     // The conversion of a field is not a name either, even when the block
     // declares one spelled like it.
     test('a conversion is not a reference', () => {
-        expect(rewrite('f"{x!r}"', 'r')).not.toContain('__follow(r)');
-        expect(rewrite('f"{r!r}"', 'r')).toContain('__follow(r)');
+        expect(rewrite('f"{x!r}"', 'r')).not.toContain('__brycomp_follow(r)');
+        expect(rewrite('f"{r!r}"', 'r')).toContain('__brycomp_follow(r)');
     });
 });

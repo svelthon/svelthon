@@ -18,79 +18,79 @@ describe('what a walrus may aim at', () => {
     test.for([
         // Unchanged: a name still goes through the namespace, which is what
         // makes the signal fire.
-        ['lambda: (count := count + 1)', 'lambda: __assign("count", count + 1)'],
+        ['lambda: (count := count + 1)', 'lambda: __brycomp_assign("count", count + 1)'],
 
         // An attribute, the form `Tween` and `Spring` force on a handler.
-        ['lambda: (progress.target := 1)', 'lambda: __setattr(progress, "target", 1)'],
+        ['lambda: (progress.target := 1)', 'lambda: __brycomp_setattr(progress, "target", 1)'],
 
         // A key. The whole subscript is the target, so the object is what comes
         // before the last bracket.
         [
             'lambda event: (m["x"] := event.clientX)',
-            'lambda event: __setitem(m, "x", event.clientX)'
+            'lambda event: __brycomp_setitem(m, "x", event.clientX)'
         ],
 
         // Only the last step is assigned; the rest is the object to assign into.
-        ['lambda: (a.b.c := 1)', 'lambda: __setattr(a.b, "c", 1)'],
-        ['lambda: (rows[i]["done"] := True)', 'lambda: __setitem(rows[i], "done", True)'],
+        ['lambda: (a.b.c := 1)', 'lambda: __brycomp_setattr(a.b, "c", 1)'],
+        ['lambda: (rows[i]["done"] := True)', 'lambda: __brycomp_setitem(rows[i], "done", True)'],
         // An attribute named as Python reads the name, and a walrus inside the
         // key or the receiver rewritten as one in the value is.
-        ['lambda: (box.ﬁeld := 1)', 'lambda: __setattr(box, "field", 1)'],
-        ['lambda: (rows[(chosen := 1)] := 7)', 'lambda: __setitem(rows, __assign("chosen", 1), 7)'],
-        ['lambda: (boxes[(chosen := 1)].width := 7)', 'lambda: __setattr(boxes[__assign("chosen", 1)], "width", 7)'],
+        ['lambda: (box.ﬁeld := 1)', 'lambda: __brycomp_setattr(box, "field", 1)'],
+        ['lambda: (rows[(chosen := 1)] := 7)', 'lambda: __brycomp_setitem(rows, __brycomp_assign("chosen", 1), 7)'],
+        ['lambda: (boxes[(chosen := 1)].width := 7)', 'lambda: __brycomp_setattr(boxes[__brycomp_assign("chosen", 1)], "width", 7)'],
         // A receiver in parentheses, as Python's `=` writes through one; and
         // parentheses with no step after them, which Python refuses, left to it.
-        ['lambda: ((left if ready else right).label := 1)', 'lambda: __setattr((left if ready else right), "label", 1)'],
-        ['lambda: ((left if ready else right)["label"] := 1)', 'lambda: __setitem((left if ready else right), "label", 1)'],
+        ['lambda: ((left if ready else right).label := 1)', 'lambda: __brycomp_setattr((left if ready else right), "label", 1)'],
+        ['lambda: ((left if ready else right)["label"] := 1)', 'lambda: __brycomp_setitem((left if ready else right), "label", 1)'],
         ['lambda: ((x) := 1)', 'lambda: ((x) := 1)'],
         // And a list or a dict written in place.
-        ['lambda: ([left, right][i].label := 1)', 'lambda: __setattr([left, right][i], "label", 1)'],
-        ['lambda: ({True: left, False: right}[ready]["label"] := 1)', 'lambda: __setitem({True: left, False: right}[ready], "label", 1)'],
+        ['lambda: ([left, right][i].label := 1)', 'lambda: __brycomp_setattr([left, right][i], "label", 1)'],
+        ['lambda: ({True: left, False: right}[ready]["label"] := 1)', 'lambda: __brycomp_setitem({True: left, False: right}[ready], "label", 1)'],
 
         // Mixed, in one tuple: the three targets side by side.
         [
             'lambda: (a := 1, b.c := 2, d[k] := 3)',
-            'lambda: (__assign("a", 1), __setattr(b, "c", 2), __setitem(d, k, 3))'
+            'lambda: (__brycomp_assign("a", 1), __brycomp_setattr(b, "c", 2), __brycomp_setitem(d, k, 3))'
         ],
 
         // A colon inside the key is a slice, which Python assigns to and passes
         // as an argument spelt `slice(start, stop, step)`, under the compiler's
         // name, a bound left out being `None`; one per part of a tuple key.
-        ['lambda: (items[1:] := 2)', 'lambda: __setitem(items, __slice(1, None), 2)'],
-        ['lambda: (grid[::2, 0] := 2)', 'lambda: __setitem(grid, (__slice(None, None, 2), 0), 2)'],
+        ['lambda: (items[1:] := 2)', 'lambda: __brycomp_setitem(items, __brycomp_slice(1, None), 2)'],
+        ['lambda: (grid[::2, 0] := 2)', 'lambda: __brycomp_setitem(grid, (__brycomp_slice(None, None, 2), 0), 2)'],
 
         // ...but each `lambda` takes the next colon, as Python reads it, before
         // or after a slice's own, or with none at all.
-        ['lambda: (d[1:lambda: 2] := 1)', 'lambda: __setitem(d, __slice(1, lambda: 2), 1)'],
-        ['lambda: (d[lambda: 1:2] := 1)', 'lambda: __setitem(d, __slice(lambda: 1, 2), 1)'],
-        ['lambda: (d[1 if True else lambda: 2] := 1)', 'lambda: __setitem(d, 1 if True else lambda: 2, 1)'],
+        ['lambda: (d[1:lambda: 2] := 1)', 'lambda: __brycomp_setitem(d, __brycomp_slice(1, lambda: 2), 1)'],
+        ['lambda: (d[lambda: 1:2] := 1)', 'lambda: __brycomp_setitem(d, __brycomp_slice(lambda: 1, 2), 1)'],
+        ['lambda: (d[1 if True else lambda: 2] := 1)', 'lambda: __brycomp_setitem(d, 1 if True else lambda: 2, 1)'],
 
         // A `:=` alone between the brackets is the key it binds, written as the
         // parenthesised one is, the component's name with it.
-        ['lambda: (items[i := 0] := 9)', 'lambda: __setitem(items, __assign("i", 0), 9)'],
+        ['lambda: (items[i := 0] := 9)', 'lambda: __brycomp_setitem(items, __brycomp_assign("i", 0), 9)'],
 
         // Parentheses that are a generator's, the walrus its element: the `for`
         // and its `if` stay the generator's, around the assignment.
-        ['lambda: list((value := n for n in [1, 2]))', 'lambda: list((__assign("value", n) for n in [1, 2]))'],
-        ['lambda: list((value := n for n in [1, 2, 3] if n % 2))', 'lambda: list((__assign("value", n) for n in [1, 2, 3] if n % 2))'],
-        ['lambda: list((value := (n, n + 10) for n in [1, 2]))', 'lambda: list((__assign("value", (n, n + 10)) for n in [1, 2]))'],
+        ['lambda: list((value := n for n in [1, 2]))', 'lambda: list((__brycomp_assign("value", n) for n in [1, 2]))'],
+        ['lambda: list((value := n for n in [1, 2, 3] if n % 2))', 'lambda: list((__brycomp_assign("value", n) for n in [1, 2, 3] if n % 2))'],
+        ['lambda: list((value := (n, n + 10) for n in [1, 2]))', 'lambda: list((__brycomp_assign("value", (n, n + 10)) for n in [1, 2]))'],
 
         // A list or a set, whose elements a walrus stands in bare: the bracket
         // or the brace stays around them. A subscript is no list.
-        ['lambda: [value := n * 10 for n in xs]', 'lambda: [__assign("value", n * 10) for n in xs]'],
-        ['lambda: {other := n for n in xs}', 'lambda: {__assign("other", n) for n in xs}'],
-        ['lambda: [value := 5, other := 6]', 'lambda: [__assign("value", 5), __assign("other", 6)]'],
+        ['lambda: [value := n * 10 for n in xs]', 'lambda: [__brycomp_assign("value", n * 10) for n in xs]'],
+        ['lambda: {other := n for n in xs}', 'lambda: {__brycomp_assign("other", n) for n in xs}'],
+        ['lambda: [value := 5, other := 6]', 'lambda: [__brycomp_assign("value", 5), __brycomp_assign("other", 6)]'],
         ['lambda: rows[0]', 'lambda: rows[0]'],
 
         // ...and a name that only starts with `for` is a name, as Python reads
         // a word, an accented letter included.
-        ['lambda: (selected := forêt)', 'lambda: __assign("selected", forêt)'],
-        ['lambda: (selected := força)', 'lambda: __assign("selected", força)'],
-        ['lambda: (selected := model.forêt)', 'lambda: __assign("selected", model.forêt)'],
-        ['lambda: (selected := forêt())', 'lambda: __assign("selected", forêt())'],
+        ['lambda: (selected := forêt)', 'lambda: __brycomp_assign("selected", forêt)'],
+        ['lambda: (selected := força)', 'lambda: __brycomp_assign("selected", força)'],
+        ['lambda: (selected := model.forêt)', 'lambda: __brycomp_assign("selected", model.forêt)'],
+        ['lambda: (selected := forêt())', 'lambda: __brycomp_assign("selected", forêt())'],
 
         // ...but a colon inside a string is just a string.
-        ['lambda: (d["a:b"] := 1)', 'lambda: __setitem(d, "a:b", 1)'],
+        ['lambda: (d["a:b"] := 1)', 'lambda: __brycomp_setitem(d, "a:b", 1)'],
 
         // Untouched, as before: a call's parenthesis is not a group, and a
         // comparison is not an assignment.
@@ -101,12 +101,12 @@ describe('what a walrus may aim at', () => {
         // An f-string's fields are code, its text is not. A field ending in `=`
         // prints its own text, kept in a string field of its own, then the value
         // with the `!r` the `=` implies when nothing else is said.
-        ['lambda: f"{(n := 1)}"', 'lambda: f"{__assign("n", 1)}"'],
-        ['lambda: f"{(n := 1)!s:>3}"', 'lambda: f"{__assign("n", 1)!s:>3}"'],
-        ['lambda: f"{x:{(w := 4)}}"', 'lambda: f"{x:{__assign("w", 4)}}"'],
-        ['lambda: f"{ (n := 1) = }"', 'lambda: f"{" (n := 1) = "}{ __assign("n", 1) !r}"'],
-        ['lambda: f"{(n := 1)=:>3}"', 'lambda: f"{"(n := 1)="}{__assign("n", 1):>3}"'],
-        ['lambda: f"{(n := 1)=!s}"', 'lambda: f"{"(n := 1)="}{__assign("n", 1)!s}"'],
+        ['lambda: f"{(n := 1)}"', 'lambda: f"{__brycomp_assign("n", 1)}"'],
+        ['lambda: f"{(n := 1)!s:>3}"', 'lambda: f"{__brycomp_assign("n", 1)!s:>3}"'],
+        ['lambda: f"{x:{(w := 4)}}"', 'lambda: f"{x:{__brycomp_assign("w", 4)}}"'],
+        ['lambda: f"{ (n := 1) = }"', 'lambda: f"{" (n := 1) = "}{ __brycomp_assign("n", 1) !r}"'],
+        ['lambda: f"{(n := 1)=:>3}"', 'lambda: f"{"(n := 1)="}{__brycomp_assign("n", 1):>3}"'],
+        ['lambda: f"{(n := 1)=!s}"', 'lambda: f"{"(n := 1)="}{__brycomp_assign("n", 1)!s}"'],
         ['lambda: f"{n}{n == 1}{n=}"', 'lambda: f"{n}{n == 1}{n=}"'],
         ['lambda: f"(n := 1) {{(n := 1)}}"', 'lambda: f"(n := 1) {{(n := 1)}}"'],
         ['lambda: "{(n := 1)}"', 'lambda: "{(n := 1)}"']

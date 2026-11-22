@@ -10,9 +10,9 @@ import { pyEvent, NONE } from '../src/lib/bridge.js';
 // callback by convention, so the breadth is defensible for a component.
 //
 // What was not defensible is where it led: an attribute caught this way skips
-// `__bound`, and `__bound` is the one place Python's None becomes `undefined` on
+// `__brycomp_bound`, and `__brycomp_bound` is the one place Python's None becomes `undefined` on
 // the way to the DOM. So `once={missing}` wrote the None *object* into the
-// attribute, which is the exact leak `__bound` exists to stop, in the one
+// attribute, which is the exact leak `__brycomp_bound` exists to stop, in the one
 // position it did not reach.
 //
 // The repair is in `pyEvent` rather than in the test that marks a handler: a

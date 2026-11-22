@@ -69,20 +69,20 @@ describe('compiler', () => {
         // cell as born.
         const { script } = compile('items = []\n', 'R', 'R.svelte');
 
-        expect(script).toContain('let __rev_items = $state.raw(0)');
-        expect(script).toContain('const __bump_items = () => { __rev_items += 1; }');
+        expect(script).toContain('let __brycomp_rev_items = $state.raw(0)');
+        expect(script).toContain('const __brycomp_bump_items = () => { __brycomp_rev_items += 1; }');
         expect(script).toContain(
-            "bind(__proto, 'items', () => (__SHAPING.on ? __followOwn((items ?? __bump_items.held)) : (__rev_items, (items ?? __bump_items.held)))"
+            "bind(__brycomp_proto, 'items', () => (__brycomp_SHAPING.on ? __brycomp_followOwn((items ?? __brycomp_bump_items.held)) : (__brycomp_rev_items, (items ?? __brycomp_bump_items.held)))"
         );
-        // The list is the third argument, and `__leave` is what empties it,
+        // The list is the third argument, and `__brycomp_leave` is what empties it,
         // once, laid down by an effect run at once, before the script can
         // raise. On a server the list is closed from the start: nothing signs
         // onto it. A container reached through a store outlives the instance
         // that read it, so subscribing without a way out accumulates.
-        expect(script).toContain('__track(__next, __bump_items, __subs)');
-        expect(script).toContain('if (!__pybridge.browser) __unsubscribe(__subs);');
-        expect(script).toContain('const __leave = () => { if (__gone) return; __gone = true; __unsubscribe(__subs); };');
-        expect(script.indexOf('$effect.pre(() => __leave);')).toBeLessThan(script.indexOf('__init(__py)'));
+        expect(script).toContain('__brycomp_track(__brycomp_next, __brycomp_bump_items, __brycomp_subs)');
+        expect(script).toContain('if (!__brycomp_pybridge.browser) __brycomp_unsubscribe(__brycomp_subs);');
+        expect(script).toContain('const __brycomp_leave = () => { if (__brycomp_gone) return; __brycomp_gone = true; __brycomp_unsubscribe(__brycomp_subs); };');
+        expect(script.indexOf('$effect.pre(() => __brycomp_leave);')).toBeLessThan(script.indexOf('__brycomp_init(__brycomp_py)'));
     });
 
     test('a store folds annotations into state and registers itself for Python', () => {
@@ -90,7 +90,7 @@ describe('compiler', () => {
 
         expect(script).not.toContain('$props()'); // a store has no parent
         expect(script).toContain('let n = $state.raw');
-        expect(script).toContain('__pythonModule(__py, "shop"');
+        expect(script).toContain('__brycomp_pythonModule(__brycomp_py, "shop"');
     });
 
     // Brython scatters `$B.set_lineno(frame, N)` through its output, which is
@@ -180,7 +180,7 @@ def increment():
     // The boundary towards JavaScript is laid down at compile time; what it
     // then does is checked in boundary.test.js.
     // This used to read *wrapped once, not on every read*, and asserted the
-    // `const __js_error = __jsCall(error);` that carried it. Wrapping once was
+    // `const __js_error = __brycomp_jsCall(error);` that carried it. Wrapping once was
     // never the goal: the goal was that a function adapted twice not be two
     // different proxies, and a name is a **binding** — taking its value once
     // meant a `let` in a `<script module>` reached Python as the number it had
@@ -197,7 +197,7 @@ def increment():
             { plain: true }
         );
 
-        expect(script).toContain("bind(__proto, 'error', () => __jsCall(error), ");
+        expect(script).toContain("bind(__brycomp_proto, 'error', () => __brycomp_jsCall(error), ");
         expect(script).not.toContain('const __js_error =');
     });
 
@@ -206,8 +206,8 @@ def increment():
         // read of to_py, and on that one alone.
         const { script } = compile('x = 1\n', 'C', 'src/C.svelte');
 
-        expect(script).toMatch(/import \{[^}]*\bpyData as __pyData\b[^}]*\} from 'svelthon\/bridge'/);
-        expect(script).toContain("bind(__proto, 'to_py', () => __pyData");
+        expect(script).toMatch(/import \{[^}]*\bpyData as __brycomp_pyData\b[^}]*\} from 'svelthon\/bridge'/);
+        expect(script).toContain("bind(__brycomp_proto, 'to_py', () => __brycomp_pyData");
     });
 
     // A `from x import y` inside a docstring is documentation, not an import.

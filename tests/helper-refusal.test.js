@@ -12,7 +12,7 @@ import { pyError, plainData, NONE } from '../src/lib/bridge.js';
 // that is sometimes empty is the ordinary way to reach one.
 //
 // They cannot know the file: they run at render time, inside a compiled
-// `__expr_N`. So the sentence stays with the helper and the position is added by
+// `__brycomp_expr_N`. So the sentence stays with the helper and the position is added by
 // `pyError`, which the wrapper around every component function already calls
 // with both. The mark is what tells it that this error is ours to complete.
 describe('a helper refuses in the project’s own dialect', () => {

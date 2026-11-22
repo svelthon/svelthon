@@ -20,7 +20,7 @@ import '../src/lib/compile.js';
 const READS_DECLARATION_TAGS = [5, 56, 0];
 
 test('the Svelte the package asks for reads the declaration tags its markup emits', () => {
-    expect(pythonExpressions('{#each rows as row}{row}{/each}', collector([]))).toMatch(/^\{const __rows_/);
+    expect(pythonExpressions('{#each rows as row}{row}{/each}', collector([]))).toMatch(/^\{const __brycomp_rows_/);
 
     const asked = JSON.parse(readFileSync('package.json', 'utf8')).peerDependencies.svelte;
     const floor = asked.match(/^\^(\d+)\.(\d+)\.(\d+)$/).slice(1).map(Number);

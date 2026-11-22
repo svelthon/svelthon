@@ -12,7 +12,7 @@ def note():
     typed = "clicked"
 </script>
 
-<!-- The one with visible wrong output: skipping the pair skips __bound, which
+<!-- The one with visible wrong output: skipping the pair skips __brycomp_bound, which
      is where None becomes undefined on the way to the DOM. -->
 <input data-k="quoted_none" bind:value="{missing}">
 <input data-k="bare_none" bind:value={missing}>

@@ -1,6 +1,6 @@
 // **A template `:=` writes under the one tuple key Python reads**, `grid[1, 2]`
 // being `grid[(1, 2)]` and `grid[*keys]` being `grid[(*keys,)]`: the key went
-// into `__setitem(grid, 1, 2, "after")` bare, two arguments where there is one,
+// into `__brycomp_setitem(grid, 1, 2, "after")` bare, two arguments where there is one,
 // and wrote `2` under `1` without a word; `grid[1,]` made `1,,` and did not
 // compile.
 import { test, expect } from 'vitest';

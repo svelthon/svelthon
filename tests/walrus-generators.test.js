@@ -1,6 +1,6 @@
 // **A walrus that is a generator's element leaves the generator its `for`**:
 // `(value := n for n in xs)` is a generator whose element assigns, and the
-// rewrite took the clause for the value, `__assign("value", n for n in xs)`,
+// rewrite took the clause for the value, `__brycomp_assign("value", n for n in xs)`,
 // which Python refuses, so the component did not compile.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';

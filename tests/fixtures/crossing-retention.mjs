@@ -3,7 +3,7 @@
 // object of its own, drops them, collects, and prints how many are still
 // alive. The last use is the one a relay that kept its pair would hold. Plain
 // closures are the control that says a collection happened.
-import { __pybridge } from '../../src/lib/bridge.js';
+import { __brycomp_pybridge } from '../../src/lib/bridge.js';
 
 const reading = process.argv[2] === 'read';
 const held = [];
@@ -13,8 +13,8 @@ for (let i = 0; i < 16; i++) {
     const one = { i };
     held.push(new WeakRef(one));
     closures.push(new WeakRef(() => i));
-    if (reading) void __pybridge.crossing[__pybridge.pair(() => one, () => {})];
-    else __pybridge.crossing[__pybridge.pair(() => undefined, () => one)] = i;
+    if (reading) void __brycomp_pybridge.crossing[__brycomp_pybridge.pair(() => one, () => {})];
+    else __brycomp_pybridge.crossing[__brycomp_pybridge.pair(() => undefined, () => one)] = i;
 }
 
 for (let i = 0; i < 5; i++) {

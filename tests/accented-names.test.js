@@ -6,7 +6,7 @@
 // state, it works. The six signs the dialect adds to Python each matched a name
 // with `[A-Za-z_]\w*`, and JavaScript's `\w` is ASCII, so the same name was a
 // name to the script half and not to any of the signs. Three of the six then
-// failed in silence: `{totál = 2}` emitted `__text(totál = 2)`, a call with a
+// failed in silence: `{totál = 2}` emitted `__brycomp_text(totál = 2)`, a call with a
 // keyword argument, which is valid Python and reaches the author as a TypeError
 // naming a generated function.
 //

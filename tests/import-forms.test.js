@@ -31,7 +31,7 @@ describe('the four shapes of importjs', () => {
 
         expect(out).toContain('fly as glide');
         // The local name is the one Python reads.
-        expect(out).toContain("bind(__proto, 'glide'");
+        expect(out).toContain("bind(__brycomp_proto, 'glide'");
     });
 
     test('default', () => {
@@ -66,8 +66,8 @@ describe('the four shapes of importjs', () => {
         const out = script('importjs Card, {fly} from "./Card.svelte"\n');
 
         expect(out).toContain('import Card, { fly } from "./Card.svelte";');
-        expect(out).toContain("bind(__proto, 'Card'");
-        expect(out).toContain("bind(__proto, 'fly'");
+        expect(out).toContain("bind(__brycomp_proto, 'Card'");
+        expect(out).toContain("bind(__brycomp_proto, 'fly'");
     });
 });
 
@@ -80,7 +80,7 @@ describe('a declaration the compiler cannot read', () => {
             plain: true
         }).script;
 
-        expect(out).toContain('export { __export_load as load };');
+        expect(out).toContain('export { __brycomp_export_load as load };');
     });
 
     // Left out, the entry exported nothing and said nothing, where CPython's

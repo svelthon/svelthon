@@ -4,8 +4,8 @@
     const state = 'module';
 
     export function status() {
-        const __svelthon_state = 'local';
-        return state + ':' + __svelthon_state;
+        const __brycomp_svelthon_state = 'local';
+        return state + ':' + __brycomp_svelthon_state;
     }
 </script>
 

@@ -26,7 +26,7 @@ yields is wrapped for JavaScript by `pyEvent`, which reads the signature Brython
 recorded in `$function_infos`, trims the call to the declared arity and converts
 the arguments. That is what lets `lambda: choose(pep)` ignore the DOM event it is
 handed while `lambda e: read(e.target.value)` receives it. The wrapper is named
-`__event` in the markup pass and emitted by the compiler, which is what carries
+`__brycomp_event` in the markup pass and emitted by the compiler, which is what carries
 the component's line offset — the markup pass runs too early to know it.
 
 **A handler that assigns takes the walrus.** `onclick={() => (open = !open)}` has
@@ -37,16 +37,16 @@ function, a lambda is one, so the write dies with the call, silently. Measured
 before it was changed: the click ran, the value did not move, nothing was
 reported.
 
-So the markup pass rewrites a parenthesised walrus into `__assign("name", value)`
+So the markup pass rewrites a parenthesised walrus into `__brycomp_assign("name", value)`
 — pure string work, in `markup.js`, because `py2js` hands back a *copy* of the
 AST and mutating it changes nothing in the generated code (measured too).
-`__assign` writes through the namespace, so through the accessor, so the signal
+`__brycomp_assign` writes through the namespace, so through the accessor, so the signal
 fires. Handlers only: a render must not write state, and Svelte rejects it.
 
 `f(x := 1)` keeps Python's meaning — a temporary the call consumes — because the
 rewrite requires the parentheses Python's own grammar forces in a lambda.
 
-**`class:` takes a truth value**, so it goes through `__truthy`: an empty list is
+**`class:` takes a truth value**, so it goes through `__brycomp_truthy`: an empty list is
 false here and true in JavaScript, exactly as in `{#if}`. `style:` takes a value
 and is stringified like any other.
 
@@ -93,7 +93,7 @@ as its parameter:
 
 ```svelte
 bind:group={form.pick} value={n}
-  →  use:__group={[form["pick"], (v) => form["pick"] = v, n]}
+  →  use:__brycomp_group={[form["pick"], (v) => form["pick"] = v, n]}
 ```
 
 Which removes the need for a group identity altogether: each input computes its
@@ -115,7 +115,7 @@ The `type` is read off the node. The **value cannot be**, and it is the one plac
 a directive here has to look at the attribute beside it. A DOM value is text, so
 `value={5}` reads back as `"5"`: the group filled nothing at mount, and a
 checkbox left `[1, '1']` behind — the same choice under two types. The typed
-value is nowhere on the node either. Svelte keeps it on the hidden `__value`
+value is nowhere on the node either. Svelte keeps it on the hidden `__brycomp_value`
 property, but only for an element it *sees* a group binding on, and this one
 carries an action. So the markup pass reads the tag's own `value`, on either side
 of the binding, and passes it as the third member. Only the braced spelling: a

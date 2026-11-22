@@ -1,5 +1,5 @@
 // **A snippet's positional pattern takes a Python iterable apart as Python
-// does**: `__pybridge.positional` asked for JavaScript's protocol alone, which a
+// does**: `__brycomp_pybridge.positional` asked for JavaScript's protocol alone, which a
 // `range`, a generator, an iterator and an instance's `__iter__` do not have,
 // so `[a, b]` read two empty positions and rendered `:` without a word. A
 // generator is walked as far as the pattern reads, its third step never taken.

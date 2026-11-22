@@ -9,7 +9,7 @@ import { mount, unmount, flushSync } from './mounted.js';
 import ClassMap from './fixtures/ClassMap.svelte';
 import ClassMapNative from './fixtures/ClassMapNative.svelte';
 import ClassLazy from './fixtures/ClassLazy.svelte';
-import { __pybridge } from '../src/lib/bridge.js';
+import { __brycomp_pybridge } from '../src/lib/bridge.js';
 
 // Telling a JavaScript object from one of the engine's reads `ob_type` without
 // running a getter of that name, which is the author's and which Svelte never
@@ -22,7 +22,7 @@ test('an object of classes whose ob_type is a getter is read without running it'
         }
     });
 
-    expect(__pybridge.klass(classes)).toBe(classes);
+    expect(__brycomp_pybridge.klass(classes)).toBe(classes);
 });
 
 const classesOf = async (Component, classes) => {

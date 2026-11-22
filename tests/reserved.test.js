@@ -8,8 +8,8 @@ import NamedPy from './fixtures/NamedPy.svelte';
 // component's own scope and a Python name of that spelling could not coexist
 // with it.
 //
-// The markup has compiled to Python since — the wrappers are `__truthy` and
-// `__text`, bound into the namespace — so the reservation outlived its cause.
+// The markup has compiled to Python since — the wrappers are `__brycomp_truthy` and
+// `__brycomp_text`, bound into the namespace — so the reservation outlived its cause.
 describe('a module-level name spelled like a runtime helper', () => {
     test('a component may call something py', () => {
         const target = document.body.appendChild(document.createElement('div'));

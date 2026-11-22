@@ -36,7 +36,7 @@ describe('a compiler refusal names the author’s line', () => {
     // Each body puts its fault on **Python line 3**, so the author's line is
     // 3 + 4 = 7 and one number checks both halves of the sum.
     test.for([
-        ["a name with the compiler's prefix", 'a = 1\n\n__thing = 2\n'],
+        ["a name with the compiler's prefix", 'a = 1\n\n__brycomp_thing = 2\n'],
         ["one of Svelthon's own words", 'a = 1\n\ndef effect():\n    pass\n'],
         ['a JavaScript keyword', 'a = 1\n\ndelete = 4\n']
     ])('%s', ([, body]) => {
@@ -93,7 +93,7 @@ describe('a compiler refusal names the author’s line', () => {
     // The half a terminal cannot use and an editor can: the same line, on the
     // error object, which is what puts the squiggle on the right row.
     test.for([
-        ["a name with the compiler's prefix", 'a = 1\n\n__thing = 2\n'],
+        ["a name with the compiler's prefix", 'a = 1\n\n__brycomp_thing = 2\n'],
         ["one of Svelthon's own words", 'a = 1\n\ndef effect():\n    pass\n']
     ])('%s carries the line for a tool', ([, body]) => {
         const error = refuse(body);
@@ -105,7 +105,7 @@ describe('a compiler refusal names the author’s line', () => {
     // The offset is what a missing `+ lineOffset` hides, so the same fault is
     // compiled twice and the two answers have to differ by the offset.
     test('and the line moves with the offset, which is the whole of it', () => {
-        const body = 'a = 1\n\n__thing = 2\n';
+        const body = 'a = 1\n\n__brycomp_thing = 2\n';
         let alone;
 
         try {

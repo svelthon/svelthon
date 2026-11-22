@@ -12,7 +12,7 @@ EXPECTED='preloaded=OK True | doc=OK DOMNode | create=OK INPUT | tagName=OK INPU
 # And the markup pass, `svelthon/markup`, loaded as a page that compiles its own
 # components loads it: under Node alone, the suite never saw it stop loading.
 MARKUP_URL="http://localhost:$PORT/markup.html"
-MARKUP_EXPECTED='markup=OK {__expr_0()} {__expr_1()} | 2 functions'
+MARKUP_EXPECTED='markup=OK {__brycomp_expr_0()} {__brycomp_expr_1()} | 2 functions'
 
 # And a player's settings bound to members of one Python object, set together:
 # Chromium hands each change back by an event of its own, later, which jsdom

@@ -8,7 +8,7 @@
 // left of 2 000 of them, 4 096 characters each, is read off the heap, for the
 // adapter and for the same writes made directly.
 import { randomBytes } from 'node:crypto';
-import { __pybridge, pyData } from '../../src/lib/bridge.js';
+import { __brycomp_pybridge, pyData } from '../../src/lib/bridge.js';
 
 const kept = { native: [], provide: [], provided: [] };
 
@@ -18,8 +18,8 @@ const once = (kind, key) => {
     const get = (k) => contexts.get(k);
 
     if (kind === 'native') set(key, 42);
-    if (kind === 'provide') __pybridge.provide(set, get, () => contexts, key, pyData({ answer: 42 }));
-    if (kind === 'provided') __pybridge.provided(get, key);
+    if (kind === 'provide') __brycomp_pybridge.provide(set, get, () => contexts, key, pyData({ answer: 42 }));
+    if (kind === 'provided') __brycomp_pybridge.provided(get, key);
 
     kept[kind].push(new WeakRef(key));
 };
@@ -60,7 +60,7 @@ const leftBy = async (write) => {
 };
 
 alive.nativeStrings = await leftBy((set, get, own, key) => set(key, 0.5));
-alive.provideStrings = await leftBy((set, get, own, key) => __pybridge.provide(set, get, own, key, pyData(0.5)));
+alive.provideStrings = await leftBy((set, get, own, key) => __brycomp_pybridge.provide(set, get, own, key, pyData(0.5)));
 
 // And a value published again under one key of a context still alive: the 63
 // it replaced go, as `Map.set` lets them go.
@@ -71,7 +71,7 @@ for (let i = 0; i < 64; i++) {
     const value = pyData({ answer: i });
 
     replaced.push(new WeakRef(value));
-    __pybridge.provide((k, v) => live.set(k, v), (k) => live.get(k), () => live, 'theme', value);
+    __brycomp_pybridge.provide((k, v) => live.set(k, v), (k) => live.get(k), () => live, 'theme', value);
 }
 
 await settle();

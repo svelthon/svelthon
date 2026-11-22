@@ -29,26 +29,26 @@ const rewrite = (markup) =>
 describe('a directive that names a function', () => {
     test('hands its head and value to the adapter of its kind', () => {
         expect(rewrite('<p use:a.act={v} in:b.fade out:c.fade transition:d.fade|global>x</p>')).toMatch(
-            /^<p use:__directiveAction=\{\["a\.act", \(\) => __expr_py_\d+\(\), __pybridge\.watched\(__expr_py_\d+\(\)\)\]\} in:__directiveTransition=\{\["b\.fade", \(\) => __expr_py_\d+\(\)\]\} out:__directiveTransition=\{\["c\.fade", \(\) => __expr_py_\d+\(\)\]\} transition:__directiveTransition\|global=\{\["d\.fade", \(\) => __expr_py_\d+\(\)\]\}>x<\/p>$/
+            /^<p use:__brycomp_directiveAction=\{\["a\.act", \(\) => __brycomp_expr_py_\d+\(\), __brycomp_pybridge\.watched\(__brycomp_expr_py_\d+\(\)\)\]\} in:__brycomp_directiveTransition=\{\["b\.fade", \(\) => __brycomp_expr_py_\d+\(\)\]\} out:__brycomp_directiveTransition=\{\["c\.fade", \(\) => __brycomp_expr_py_\d+\(\)\]\} transition:__brycomp_directiveTransition\|global=\{\["d\.fade", \(\) => __brycomp_expr_py_\d+\(\)\]\}>x<\/p>$/
         );
     });
 
     test('and inside a keyed block, where animate: belongs', () => {
         expect(rewrite('{#each xs as x (x)}<p animate:moves.flip>x</p>{/each}')).toContain(
-            'animate:__directiveAnimate={["moves.flip", '
+            'animate:__brycomp_directiveAnimate={["moves.flip", '
         );
     });
 
     // One interpolation between quotes is the value, as Svelte reads it.
     test('with its value braced or quoted', () => {
         expect(rewrite('<p use:act="{v}">x</p>')).toMatch(
-            /use:__directiveAction=\{\["act", \(\) => __expr_py_\d+\(\), __pybridge\.watched\(__expr_py_\d+\(\)\)\]\}>/
+            /use:__brycomp_directiveAction=\{\["act", \(\) => __brycomp_expr_py_\d+\(\), __brycomp_pybridge\.watched\(__brycomp_expr_py_\d+\(\)\)\]\}>/
         );
     });
 
     // An attribute may follow a quote with no space, and Svelte reads it.
     test('straight after a quoted attribute', () => {
-        expect(rewrite('<p title="note"use:act>x</p>')).toContain('"note"use:__directiveAction=');
+        expect(rewrite('<p title="note"use:act>x</p>')).toContain('"note"use:__brycomp_directiveAction=');
     });
 
     // Whitespace around `=`, which HTML allows and Svelte reads: the value was
@@ -57,7 +57,7 @@ describe('a directive that names a function', () => {
         'with whitespace around the equals sign: %s',
         (attribute) => {
             expect(rewrite(`<p ${attribute}>x</p>`)).toMatch(
-                /^<p use:__directiveAction=\{\["act", \(\) => __expr_py_\d+\(\), __pybridge\.watched\(__expr_py_\d+\(\)\)\]\}>x<\/p>$/
+                /^<p use:__brycomp_directiveAction=\{\["act", \(\) => __brycomp_expr_py_\d+\(\), __brycomp_pybridge\.watched\(__brycomp_expr_py_\d+\(\)\)\]\}>x<\/p>$/
             );
         }
     );

@@ -574,11 +574,11 @@ describe('a component compiled as a custom element', () => {
         const script = (src) => compile(src, 'Probe', 'probe.svelte', {}).script;
 
         test('present when the component reads it', () => {
-            expect(script('def go():\n    return host()\n')).toContain("bind(__proto, 'host'");
+            expect(script('def go():\n    return host()\n')).toContain("bind(__brycomp_proto, 'host'");
         });
 
         test('absent otherwise', () => {
-            expect(script('count = 0\n')).not.toContain("bind(__proto, 'host'");
+            expect(script('count = 0\n')).not.toContain("bind(__brycomp_proto, 'host'");
         });
 
         // And absent when the author only wrote the *word*. The test used to be
@@ -598,8 +598,8 @@ describe('a component compiled as a custom element', () => {
         ])('%s does not emit the binding', ([, src]) => {
             const out = script(src);
 
-            expect(out).not.toContain("bind(__proto, 'host'");
-            expect(out).not.toContain("bind(__proto, 'props_id'");
+            expect(out).not.toContain("bind(__brycomp_proto, 'host'");
+            expect(out).not.toContain("bind(__brycomp_proto, 'props_id'");
         });
 
         // Nor a name of a function's own, which reads its binding and not the
@@ -612,7 +612,7 @@ describe('a component compiled as a custom element', () => {
             ['a default value, read by the module', 'def f(x=host):\n    return x\n', true],
             ['a read inside a function', 'def go():\n    return host()\n', true]
         ])('%s decides the binding by its scope', ([, src, bound]) => {
-            expect(script(src).includes("bind(__proto, 'host'")).toBe(bound);
+            expect(script(src).includes("bind(__brycomp_proto, 'host'")).toBe(bound);
         });
 
         // And the whole way: a component holding the word in four ordinary
@@ -643,7 +643,7 @@ describe('a component compiled as a custom element', () => {
         ])('with a star import, %s decides the binding by what it is', ([, options, bound]) => {
             const out = compile('from star_host import *\nvalue = host()\n', 'Probe', 'probe.svelte', options).script;
 
-            expect(out.includes("bind(__proto, 'host'")).toBe(bound);
+            expect(out.includes("bind(__brycomp_proto, 'host'")).toBe(bound);
         });
 
         test("a component renders the `host` a star brings, as an import that names it does", () => {

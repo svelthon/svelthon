@@ -5,7 +5,7 @@
 import { test, expect } from 'vitest';
 import { mount as mountSvelte, unmount } from 'svelte';
 import { mount, flushSync } from './mounted.js';
-import { __pybridge, marks, track } from '../src/lib/bridge.js';
+import { __brycomp_pybridge, marks, track } from '../src/lib/bridge.js';
 import BlockState from './fixtures/BlockState.svelte';
 import BlockLease from './fixtures/BlockLease.svelte';
 import BlockReplace from './fixtures/BlockReplace.svelte';
@@ -88,7 +88,7 @@ test('a block signs off the list it declared when it goes', async () => {
         await Promise.resolve();
         flushSync();
     };
-    const shared = __pybridge.list([1]);
+    const shared = __brycomp_pybridge.list([1]);
     track(shared, () => {});
     const counted = () => marks(shared).bumps.length;
 

@@ -7,11 +7,11 @@
 // read-only property was accepted and stayed writable.
 import { test, expect, describe } from 'vitest';
 import { proxy } from 'svelte/internal/client';
-import { __pybridge, pyData } from '../src/lib/bridge.js';
+import { __brycomp_pybridge, pyData } from '../src/lib/bridge.js';
 
 const pair = (data) => ({
     svelte: proxy(structuredClone(data)),
-    python: __pybridge.bound(pyData(data))
+    python: __brycomp_pybridge.bound(pyData(data))
 });
 
 const SHAPES = [

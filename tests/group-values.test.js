@@ -109,7 +109,7 @@ describe('a form over floats', () => {
 // was written from, the initial button was empty, and clicking a checkbox left
 // `[1, '1']` behind — the same choice under two types.
 //
-// The typed value is read where Svelte wrote it on the node: `__value` for a
+// The typed value is read where Svelte wrote it on the node: `__brycomp_value` for a
 // spread, the cache of `set_value` for a longhand or a shorthand (`group`).
 describe('a group keeps the type of the value it was given', () => {
     const setup = () => {

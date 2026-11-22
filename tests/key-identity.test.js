@@ -13,7 +13,7 @@ import SignedZeroKey from './fixtures/SignedZeroKey.svelte';
 import FunctionKey from './fixtures/FunctionKey.svelte';
 import BoundMethodKey from './fixtures/BoundMethodKey.svelte';
 import NoneNullKey from './fixtures/NoneNullKey.svelte';
-import { __pybridge } from '../src/lib/bridge.js';
+import { __brycomp_pybridge } from '../src/lib/bridge.js';
 
 // None and `javascript.NULL` are two keys, as Python finds them unequal, alone
 // or inside a tuple: the text a tuple keys by spelled both `None`, so a context
@@ -106,11 +106,11 @@ test('a tuple or a float whose class defines its equality keys by identity', () 
     // The Python list's own members, which a view would hand over as views
     // and numbers.
     const members = (rows) => Array.from(globalThis.__BRYTHON__.PYOBJ_MAP.get(rows));
-    const keys = (rows) => members(rows).map((one) => __pybridge.key(one));
+    const keys = (rows) => members(rows).map((one) => __brycomp_pybridge.key(one));
 
     const [first, second] = keys(ownEquality.distinct);
     expect(first).not.toBe(second);
-    expect(__pybridge.key(members(ownEquality.distinct)[0])).toBe(first);
+    expect(__brycomp_pybridge.key(members(ownEquality.distinct)[0])).toBe(first);
 
     const [one, two] = keys(ownEquality.joined);
     expect(one).not.toBe(two);
@@ -302,7 +302,7 @@ describe('a key holding a NaN', () => {
 // `Symbol.for` gives back the one it registered.
 test('a symbol in a tuple key is itself alone', () => {
     const $B = globalThis.__BRYTHON__;
-    const key = (...items) => __pybridge.key($B.fast_tuple(items));
+    const key = (...items) => __brycomp_pybridge.key($B.fast_tuple(items));
     const first = Symbol('row');
     const second = Symbol('row');
 

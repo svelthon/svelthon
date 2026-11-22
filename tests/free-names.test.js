@@ -20,7 +20,7 @@ const handed = (expression) => {
 
     pythonExpressions(`{#snippet card(x=fail())}<output>{${expression}}</output>{/snippet}`, collector(defs));
 
-    return /^def __expr_1(?:_late)?\(x\):/.test(defs.at(-1));
+    return /^def __brycomp_expr_1(?:_late)?\(x\):/.test(defs.at(-1));
 };
 
 test.for([

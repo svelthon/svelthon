@@ -29,7 +29,7 @@ test('a Svelte warning on the markup names the line written', async () => {
 });
 
 // And the markup's own expressions: one written over several lines was
-// rewritten on one, `{__expr_0()}`, and every warning below it named a line as
+// rewritten on one, `{__brycomp_expr_0()}`, and every warning below it named a line as
 // many too high, the image on line 17 reported on 13. The lines are given back
 // inside the rewrite's braces.
 test('a Svelte warning below an expression written over several lines names the line written', async () => {

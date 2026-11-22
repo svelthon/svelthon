@@ -115,8 +115,8 @@ test('an element an `is` names is a custom element', () => {
     };
 
     expect([read('<button is="my-button" disabled={data}></button>'), read('<button disabled={data}></button>')]).toEqual([
-        'return __bound(data)',
-        'return __truthy(data)'
+        'return __brycomp_bound(data)',
+        'return __brycomp_truthy(data)'
     ]);
 });
 
@@ -132,20 +132,20 @@ test("a `<svelte:element>`'s name told by its text, or read as it renders", () =
         return { out, defs: defs.map((one) => one.split('\n')[1].trim()) };
     };
 
-    expect(compiled('<svelte:element this="my-list" open={data}></svelte:element>').defs).toEqual(['return __bound(data)']);
-    expect(compiled('<svelte:element this="details" is="my-list" open={data}></svelte:element>').defs).toEqual(['return __truthy(data)']);
+    expect(compiled('<svelte:element this="my-list" open={data}></svelte:element>').defs).toEqual(['return __brycomp_bound(data)']);
+    expect(compiled('<svelte:element this="details" is="my-list" open={data}></svelte:element>').defs).toEqual(['return __brycomp_truthy(data)']);
 
     const quoted = compiled('<svelte:element this="{tag}" open={data}></svelte:element>');
-    const memo = "__pybridge.reading(__expr_reread, '__expr_py_1', () => __expr_py_1())";
-    const afresh = "__pybridge.reading(__expr_reread, '__expr_py_1', this.expression, this.held)";
+    const memo = "__brycomp_pybridge.reading(__brycomp_expr_reread, '__brycomp_expr_py_1', () => __brycomp_expr_py_1())";
+    const afresh = "__brycomp_pybridge.reading(__brycomp_expr_reread, '__brycomp_expr_py_1', this.expression, this.held)";
 
     expect(quoted).toEqual({
         out:
-            '<svelte:boundary>{@const SvelthonElement0 = __expr_0()}<svelte:element this={SvelthonElement0}  ' +
-            `open={({ get value() { return __pybridge.element(SvelthonElement0, "__truthy", ` +
-            `(__expr_reread.__expr_py_1 ? __expr_py_1_read.value : __expr_py_1_memo)[0], "open"); } }).value}>` +
-            `</svelte:element></svelte:boundary>{const __expr_py_1_memo = $derived(${memo})}` +
-            `{const __expr_py_1_read = { expression: () => __expr_py_1(), held: () => __expr_py_1_memo, get value() { return ${afresh}; } }}`,
-        defs: ['return __bound(tag)', 'return __boxed(data)']
+            '<svelte:boundary>{@const SvelthonElement0 = __brycomp_expr_0()}<svelte:element this={SvelthonElement0}  ' +
+            `open={({ get value() { return __brycomp_pybridge.element(SvelthonElement0, "__brycomp_truthy", ` +
+            `(__brycomp_expr_reread.__brycomp_expr_py_1 ? __brycomp_expr_py_1_read.value : __brycomp_expr_py_1_memo)[0], "open"); } }).value}>` +
+            `</svelte:element></svelte:boundary>{const __brycomp_expr_py_1_memo = $derived(${memo})}` +
+            `{const __brycomp_expr_py_1_read = { expression: () => __brycomp_expr_py_1(), held: () => __brycomp_expr_py_1_memo, get value() { return ${afresh}; } }}`,
+        defs: ['return __brycomp_bound(tag)', 'return __brycomp_boxed(data)']
     });
 });

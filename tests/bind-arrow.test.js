@@ -78,8 +78,8 @@ describe('the bindable arrow', () => {
         // Both spellings must produce the same binding, or the sugar would be a
         // second behaviour rather than a second spelling.
         test('is the one bindable() produces', () => {
-            const arrow = emitted('value: str <=>\n').match(/bind\(__proto, 'value'.*/)[0];
-            const word = emitted('value: str = bindable()\n').match(/bind\(__proto, 'value'.*/)[0];
+            const arrow = emitted('value: str <=>\n').match(/bind\(__brycomp_proto, 'value'.*/)[0];
+            const word = emitted('value: str = bindable()\n').match(/bind\(__brycomp_proto, 'value'.*/)[0];
 
             expect(arrow).toBe(word);
         });

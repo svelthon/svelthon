@@ -6,8 +6,8 @@ import DotMissingOnce from './fixtures/DotMissingOnce.svelte';
 import DotHiddenGetitem from './fixtures/DotHiddenGetitem.svelte';
 
 // `{pep.title}` on a dict. A template expression already differs from the same
-// text in the script — `{#if}` goes through `__truthy`, an interpolation through
-// `__text` — and the dot now joins them, finding an attribute first and a key
+// text in the script — `{#if}` goes through `__brycomp_truthy`, an interpolation through
+// `__brycomp_text` — and the dot now joins them, finding an attribute first and a key
 // second, which is what Jinja does and what anyone coming from Django expects.
 describe('the dot in a template expression', () => {
     const setup = () => {

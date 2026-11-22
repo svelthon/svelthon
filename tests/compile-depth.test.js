@@ -24,5 +24,5 @@ test('a global written deep inside a function is still a name of the module', ()
     const source = `def reset():\n${nested(6, 'global message').replace(/^/gm, '    ')}    message = 1\n`;
     const { script } = compile(source, 'Deep', 'deep.svelte');
 
-    expect(script).toContain("__bind(__proto, 'message'");
+    expect(script).toContain("__brycomp_bind(__brycomp_proto, 'message'");
 });

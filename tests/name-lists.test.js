@@ -26,7 +26,7 @@
 //   The assertion is that it does not pass in silence, not whose sentence it is.
 //
 // The cell that was empty when this file was written: the compiler's prefix in
-// the markup. `{__expr_0 = 2}` emitted a declaration whose value is read from a
+// the markup. `{__brycomp_expr_0 = 2}` emitted a declaration whose value is read from a
 // function of the same name, in the same scope, and Svelte accepted it. The
 // script half had refused that since the beginning.
 import { test, expect, describe } from 'vitest';
@@ -52,7 +52,7 @@ const markup = (body) => {
 const OURS = {
     locked: /is one of Svelthon's own words/,
     reserved: /is a reserved word in JavaScript/,
-    prefix: /starts with `__`, which is the compiler's own prefix/
+    prefix: /starts with `__brycomp_`, which is the compiler's own prefix/
 };
 
 // Svelte's own refusal of a JavaScript keyword, in the two shapes it takes.
@@ -67,9 +67,11 @@ const ROWS = [
     ['a name the generated code once took', 'v', null, null],
     ["one of Svelthon's own words", 'effect', OURS.locked, null],
     ['a word JavaScript reserves', 'new', OURS.reserved, SVELTE],
-    ["the compiler's own prefix", '__x', OURS.prefix, OURS.prefix],
+    // Any other name of the author's that starts with `__` is theirs.
+    ['a name of the author starting with `__`', '__cache', null, null],
+    ["the compiler's own prefix", '__brycomp_x', OURS.prefix, OURS.prefix],
     // A FULLWIDTH LOW LINE, `＿`, which Python reads as `_`: the same name.
-    ["the compiler's own prefix as Python reads it", '_＿x', OURS.prefix, OURS.prefix]
+    ["the compiler's own prefix as Python reads it", '_＿brycomp_x', OURS.prefix, OURS.prefix]
 ];
 
 // Where the script declares a name.

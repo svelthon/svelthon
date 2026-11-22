@@ -5,7 +5,7 @@
 import { test, expect } from 'vitest';
 import { mount, unmount } from 'svelte';
 import { flushSync } from './mounted.js';
-import { __pybridge, marks, track } from '../src/lib/bridge.js';
+import { __brycomp_pybridge, marks, track } from '../src/lib/bridge.js';
 import FailedConstructionHost from './fixtures/FailedConstructionHost.svelte';
 import FailedScript from './fixtures/FailedScript.svelte';
 import FailedTemplate from './fixtures/FailedTemplate.svelte';
@@ -19,7 +19,7 @@ const settle = async () => {
 };
 
 const shared = () => {
-    const list = __pybridge.list([1]);
+    const list = __brycomp_pybridge.list([1]);
 
     track(list, () => {});
     return { list, counted: () => marks(list).bumps.length };

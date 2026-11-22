@@ -54,7 +54,7 @@ describe('server rendering', () => {
 
     // A head whose title reads an expression under an {#if}: its derived was
     // declared at the block's end, and the server renders a `<title>` in place,
-    // `Cannot access '__expr_1_memo' before initialization`, a 500 for the page.
+    // `Cannot access '__brycomp_expr_1_memo' before initialization`, a 500 for the page.
     test('a head’s title and description read under an {#if}', () => {
         const { head, body } = render(HeadUnderIf);
 

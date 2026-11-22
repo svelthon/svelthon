@@ -244,7 +244,7 @@ host.name = 'svelthon';
 // checks and that changes nothing, which raises where Svelte refuses one, in a
 // derived or a block. A plain module has no runes, so both are handed over by
 // the first component or store that loads, whose script Svelte compiles
-// (`__pybridge.tracking`, `__pybridge.refusing`), and the runtime asks nothing
+// (`__brycomp_pybridge.tracking`, `__brycomp_pybridge.refusing`), and the runtime asks nothing
 // of Svelte's internals. Until one has, every read is taken for a reaction's,
 // which costs a walk and subscribes nothing outside one, and nothing is
 // refused. What a plain module holds is watched by nobody: a JavaScript
@@ -256,7 +256,7 @@ host.untrack = untrack;
 // JavaScript walks them, by the template's own walk; SvelteKit's request event,
 // handed to Python as the snapshot `routeArgument` takes; and the line of its
 // file a frame's line stands for, by the offset that file registered.
-lent.seq = (value) => __pybridge.seq(value);
+lent.seq = (value) => __brycomp_pybridge.seq(value);
 lent.argument = (value) => routeArgument(value);
 lent.place = (file, line, namespace) => inFile(line, OWN_LINES.get(namespace) ?? FILE_LINES.get(file) ?? 0);
 
@@ -265,7 +265,7 @@ lent.place = (file, line, namespace) => inFile(line, OWN_LINES.get(namespace) ??
 const customTag = (tag) => typeof tag === 'string' && tag.includes('-');
 
 // The doors this module opens, each with its rule, registered under its name
-// (`doors`) and held by the entry of `__pybridge` that opens it. Held, not
+// (`doors`) and held by the entry of `__brycomp_pybridge` that opens it. Held, not
 // looked up: an entry is called on every crossing, and a lookup by name there
 // cost 5 to 7 % of `bound`.
 //
@@ -316,7 +316,7 @@ export const jsGlobal = globalThis;
 // `{x}` is.
 export { helpers } from 'brylters';
 
-brylters.str = (value) => __pybridge.str(value);
+brylters.str = (value) => __brycomp_pybridge.str(value);
 
 // Svelte interpolates with String(), and None is an object, so it would render
 // "[object Object]". Non-enumerable so nothing that walks the singleton's
@@ -329,8 +329,8 @@ Object.defineProperty(NONE, 'toString', {
 });
 
 // Inside a Svelte template you are in JavaScript, not Python, and the two
-// disagree. This is the bridge behind `__truthy`, `__text`, `__seq` and
-// `__spread`, the four names a compiled template expression actually calls.
+// disagree. This is the bridge behind `__brycomp_truthy`, `__brycomp_text`, `__brycomp_seq` and
+// `__brycomp_spread`, the four names a compiled template expression actually calls.
 //
 // Only generated code types it, so its name takes no word an author may want
 // from the component's scope.
@@ -367,18 +367,18 @@ const pythonComponent = (component) => {
 };
 
 // Each snippet from elsewhere, to the function that renders it with its
-// arguments crossed (`__pybridge.snippet`).
+// arguments crossed (`__brycomp_pybridge.snippet`).
 const CROSSING_SNIPPETS = new WeakMap();
 
 // Each snippet a Python markup declared, as it announced itself
-// (`__pybridge.pythonSnippet`), and the calls in progress on a server that
+// (`__brycomp_pybridge.pythonSnippet`), and the calls in progress on a server that
 // hand one values: what it was handed, before crossing.
 const PYTHON_SNIPPETS = new WeakSet();
 const SERVED_ARGUMENTS = [];
 let CROSSING_PAIR = null;
 
 // The `<select>` elements of each instance a spread may make multiple, by their
-// place in the markup (`__pybridge.selectShape`), and the one each binding's
+// place in the markup (`__brycomp_pybridge.selectShape`), and the one each binding's
 // read holds. A place may stand for many elements, every row of an `{#each}`
 // and every render of a snippet; each registers as Svelte creates it, before
 // its binding first reads, and that read claims the first one unclaimed, so
@@ -429,16 +429,16 @@ const optionValue = (scope, place, value) =>
 
 // The declarations whose marker each namespace's code has called, by the
 // number of their statement, the marker of each number, and the names each
-// namespace has bound (`__pybridge.declaration`).
+// namespace has bound (`__brycomp_pybridge.declaration`).
 const RUNE_MARKED = new WeakMap();
 const RUNE_MARKERS = [];
 const BOUND = new WeakMap();
 
-// The tokens of the defaults being taken (`__pybridge.initializing`).
+// The tokens of the defaults being taken (`__brycomp_pybridge.initializing`).
 const INITIALIZING = new Set();
 
 // How a derived of Svelte's is made, handed over by the first module that
-// loads (`__pybridge.deriving`).
+// loads (`__brycomp_pybridge.deriving`).
 let derive;
 
 // The reads of a prop no Python parent handed, which no signal follows
@@ -462,7 +462,7 @@ const unmoved = (reads) => {
     return true;
 };
 
-export const __pybridge = {
+export const __brycomp_pybridge = {
     // Whether the components run in a browser or render on a server, as Svelte
     // tells them apart: by what the code was resolved for (`esm-env`), and not
     // by a `document`, which a server lays down for a library or a test run
@@ -686,14 +686,14 @@ export const __pybridge = {
         // Handed through a `{@render}` argument, which is Python, it comes
         // back as the adapter made for it, which knows the component.
         const python = pythonComponent(component);
-        if (kind === 'spread') return python ? __pybridge.spreadPython(value) : __pybridge.spread(value);
+        if (kind === 'spread') return python ? __brycomp_pybridge.spreadPython(value) : __brycomp_pybridge.spread(value);
         if (python) return value;
         return kind === 'scalar' ? scalarOnly(value) : pyNumbers(value);
     },
 
     // A binding's read/write pair, for the binding Svelte takes no pair for,
     // `bind:group` on a component, written
-    // `__pybridge.crossing[__pybridge.pair(read, write)]`. Svelte asks there
+    // `__brycomp_pybridge.crossing[__brycomp_pybridge.pair(read, write)]`. Svelte asks there
     // for a member of a name, and reads or writes it right after computing
     // its key, which is when the pair is handed over. It is taken off the
     // slot before it is called, so the slot holds nothing of a component once
@@ -727,7 +727,7 @@ export const __pybridge = {
             // `define`, because the key is the author's: `"__proto__"` is a
             // class name here, not the object's prototype.
             const out = {};
-            for (const [key, one] of pyEntries(value)) define(out, __pybridge.str(key), __pybridge.truthy(one));
+            for (const [key, one] of pyEntries(value)) define(out, __brycomp_pybridge.str(key), __brycomp_pybridge.truthy(one));
             return out;
         }
 
@@ -741,7 +741,7 @@ export const __pybridge = {
         // it was `<generator object <genexpr>>`.
         const made = listed(value);
 
-        if (made !== value) return __pybridge.klass(made);
+        if (made !== value) return __brycomp_pybridge.klass(made);
 
         // The names the list yields, which for a subclass with its own
         // `__iter__` are not the ones it stores: the loop beside it reads the
@@ -749,11 +749,11 @@ export const __pybridge = {
         // read the same way. Read by index into a plain array (`byIndex`).
         if (Array.isArray(value) || isSet(value)) {
             return byIndex(iterated(value))
-                .filter((one) => __pybridge.truthy(one))
-                .map((one) => __pybridge.klass(one));
+                .filter((one) => __brycomp_pybridge.truthy(one))
+                .map((one) => __brycomp_pybridge.klass(one));
         }
 
-        return __pybridge.truthy(value) ? __pybridge.str(value) : undefined;
+        return __brycomp_pybridge.truthy(value) ? __brycomp_pybridge.str(value) : undefined;
     },
 
     // A key of `{#key}` and of an `{#each}`, which Svelte compares with `===`
@@ -781,7 +781,7 @@ export const __pybridge = {
     hidden(value) {
         const text = typeof value === 'string' ? value : pyScalar(value);
         if (text === 'until-found') return text;
-        return __pybridge.truthy(value);
+        return __brycomp_pybridge.truthy(value);
     },
 
     // Python's str(), for interpolation: `['a', 'b']` rather than `a,b`.
@@ -802,7 +802,7 @@ export const __pybridge = {
         }
     },
 
-    // A value alone in an attribute of text (`__attr`): written as Python
+    // A value alone in an attribute of text (`__brycomp_attr`): written as Python
     // writes it, as it is with text around it (`str`), a list `[1, 2]` and a
     // float `1.0`; what has a meaning of its own to an attribute crosses as a
     // prop does (`bound`), None the absence, a boolean its presence, a
@@ -810,7 +810,7 @@ export const __pybridge = {
     // JavaScript's as JavaScript writes it.
     attr(value) {
         return value !== null && typeof value === 'object' && value !== NONE && quietPyType(value) !== undefined && !callable(value)
-            ? __pybridge.str(value)
+            ? __brycomp_pybridge.str(value)
             : attribute(value);
     },
 
@@ -819,7 +819,7 @@ export const __pybridge = {
     // uncoerced. Made text, it was refused where the browser requires the
     // policy (`require-trusted-types-for`).
     html(value) {
-        return globalThis.trustedTypes?.isHTML?.(value) ? value : __pybridge.str(value);
+        return globalThis.trustedTypes?.isHTML?.(value) ? value : __brycomp_pybridge.str(value);
     },
 
     // A JavaScript array handed back to Python. A list *is* an array in Brython,
@@ -883,7 +883,7 @@ export const __pybridge = {
     // it off the option, and a multiple one an array Svelte made of them, which
     // is none of their values.
     selectWrite(scope, place) {
-        return (value) => (Array.isArray(value) && !optionValue(scope, place, value) ? __pybridge.selected(value) : pyBind(value));
+        return (value) => (Array.isArray(value) && !optionValue(scope, place, value) ? __brycomp_pybridge.selected(value) : pyBind(value));
     },
 
     // `{#each}` walks a JavaScript array. A Python list or tuple already is one,
@@ -1088,7 +1088,7 @@ export const __pybridge = {
     // block holds: the same list, unchanged since (its `stamp`), with nothing
     // to compare; otherwise row by row, by identity, and a tuple, which
     // `enumerate()` and `.items()` make anew each time, by what it holds. Each
-    // component's `__collection` carries the result to the block with Svelte's
+    // component's `__brycomp_collection` carries the result to the block with Svelte's
     // own runes, which this file, made for any host, does not hold.
     //
     // A copy, since a list changes in place and the next comparison is with
@@ -1254,7 +1254,7 @@ export const __pybridge = {
     boundTruth(value) {
         if (value === NONE || value === undefined) return undefined;
 
-        return value === null ? null : __pybridge.truthy(value);
+        return value === null ? null : __brycomp_pybridge.truthy(value);
     },
 
     // The snippet a `{@render}` renders when its spelling does not say whose it
@@ -1278,7 +1278,7 @@ export const __pybridge = {
     // of the Python snippet, bound to the object, and was taken for a
     // JavaScript one, its `1.0` handed over as `1`.
     snippet(value, owns) {
-        const fn = __pybridge.bound(value);
+        const fn = __brycomp_pybridge.bound(value);
 
         if (typeof fn !== 'function' || owns.includes(fn)) return fn;
 
@@ -1287,7 +1287,7 @@ export const __pybridge = {
         if (crossing === undefined && standsFor(fn, PYTHON_SNIPPETS)) return fn;
 
         if (crossing === undefined) {
-            const crossed = (one) => pyNumbers(__pybridge.bound(one));
+            const crossed = (one) => pyNumbers(__brycomp_pybridge.bound(one));
 
             crossing = BROWSER
                 ? (anchor, ...args) =>
@@ -1370,7 +1370,7 @@ export const __pybridge = {
     param(value, served, at, fallback) {
         const given = served !== null && at < served.length ? served[at] : value;
 
-        return __pybridge.absent(given) && fallback !== undefined ? fallback() : pyBind(given);
+        return __brycomp_pybridge.absent(given) && fallback !== undefined ? fallback() : pyBind(given);
     },
 
     // A default of a positional pattern taken under its token, and a name an
@@ -1486,7 +1486,7 @@ export const __pybridge = {
     // context: the Python value itself, `model = set_context("model", data)`
     // naming `data`, where it named None.
     provide(set, get, own, key, value) {
-        const out = __pybridge.toContext(value);
+        const out = __brycomp_pybridge.toContext(value);
 
         set(key, out);
 
@@ -1507,7 +1507,7 @@ export const __pybridge = {
         const value = get(key);
         const original = get(ORIGINALS)?.byKey.get(key);
 
-        return original !== undefined && Object.is(value, original.js) ? original.py : __pybridge.received(value);
+        return original !== undefined && Object.is(value, original.js) ? original.py : __brycomp_pybridge.received(value);
     },
 
     // `{...attrs}`: Svelte diffs the spread object against the one from the
@@ -1579,11 +1579,11 @@ export const __pybridge = {
             const wrapper = attributeWrapper(key);
             const present = read[key] !== NONE || unreflected(key);
             if (key[0] + key[1] === 'on') out[key] = event(read[key]);
-            else if (wrapper === '__class') out[key] = __pybridge.klass(read[key]);
-            else if (wrapper === '__truthy' && !custom && present) out[key] = __pybridge.truthy(read[key]);
-            else if (wrapper === '__hidden' && !custom && present) out[key] = __pybridge.hidden(read[key]);
-            else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__pybridge.bound(read[key]));
-            else if (!custom && wrapper === null && key !== 'style') out[key] = __pybridge.attr(read[key]);
+            else if (wrapper === '__brycomp_class') out[key] = __brycomp_pybridge.klass(read[key]);
+            else if (wrapper === '__brycomp_truthy' && !custom && present) out[key] = __brycomp_pybridge.truthy(read[key]);
+            else if (wrapper === '__brycomp_hidden' && !custom && present) out[key] = __brycomp_pybridge.hidden(read[key]);
+            else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__brycomp_pybridge.bound(read[key]));
+            else if (!custom && wrapper === null && key !== 'style') out[key] = __brycomp_pybridge.attr(read[key]);
         }
 
         return out;
@@ -1595,16 +1595,16 @@ export const __pybridge = {
     // value as it is, and on any other element its Python truth, `hidden` with
     // its third state (`wrapper`). `value` is the Python value.
     element(tag, wrapper, value, name) {
-        if (customTag(tag) || (value === NONE && !unreflected(name))) return __pybridge.bound(value);
-        if (wrapper === '__attr') return __pybridge.attr(value);
+        if (customTag(tag) || (value === NONE && !unreflected(name))) return __brycomp_pybridge.bound(value);
+        if (wrapper === '__brycomp_attr') return __brycomp_pybridge.attr(value);
 
-        return wrapper === '__hidden' ? __pybridge.hidden(value) : __pybridge.truthy(value);
+        return wrapper === '__brycomp_hidden' ? __brycomp_pybridge.hidden(value) : __brycomp_pybridge.truthy(value);
     },
 
     // And a spread there, the same question asked of each key it gives, of the
     // entries the spread read (`spreadEntries`).
     elementSpread(tag, value, event, grouped = false) {
-        return __pybridge.spreadElement(value, event, grouped, customTag(tag));
+        return __brycomp_pybridge.spreadElement(value, event, grouped, customTag(tag));
     },
 
     // The entries a spread reads, each once, the values as they are: a fresh
@@ -1614,22 +1614,22 @@ export const __pybridge = {
     }
 };
 
-// The doors `__pybridge` and the boundaries below open, under their names
+// The doors `__brycomp_pybridge` and the boundaries below open, under their names
 // (`doors`): each entry is its door's rule, and holds it. A child's door takes
 // the component after the value; a constant defined further down is read at
 // the call.
-doors.out('spread-element', __pybridge.spreadElement);
-doors.out('child', (value, component, kind) => __pybridge.child(component, value, kind));
-doors.out('each', __pybridge.seq);
-doors.out('debug', __pybridge.debugged);
-doors.out('context', __pybridge.toContext);
-doors.out('action', __pybridge.watched);
-doors.out('class', __pybridge.klass);
-doors.out('key', __pybridge.key);
-doors.out('truth', __pybridge.truthy);
-doors.out('hidden', __pybridge.hidden);
-doors.out('text', __pybridge.str);
-doors.out('snippet', __pybridge.snippet);
+doors.out('spread-element', __brycomp_pybridge.spreadElement);
+doors.out('child', (value, component, kind) => __brycomp_pybridge.child(component, value, kind));
+doors.out('each', __brycomp_pybridge.seq);
+doors.out('debug', __brycomp_pybridge.debugged);
+doors.out('context', __brycomp_pybridge.toContext);
+doors.out('action', __brycomp_pybridge.watched);
+doors.out('class', __brycomp_pybridge.klass);
+doors.out('key', __brycomp_pybridge.key);
+doors.out('truth', __brycomp_pybridge.truthy);
+doors.out('hidden', __brycomp_pybridge.hidden);
+doors.out('text', __brycomp_pybridge.str);
+doors.out('snippet', __brycomp_pybridge.snippet);
 doors.out('export', pyExport);
 doors.out('handler', pyEvent);
 doors.out('attach', pyAttach);
@@ -1638,10 +1638,10 @@ doors.out('expression-python', (value) => keptPython(value));
 doors.out('expression-child', (value) => handedPython(value));
 doors.out('expression-scalar', (value) => COMPARED.scalar(value));
 doors.out('expression-selection', (value) => COMPARED.selection(value));
-doors.in('context', __pybridge.received);
-doors.in('snippet-param', __pybridge.param);
-doors.in('selected', __pybridge.selected);
-doors.in('list', __pybridge.list);
+doors.in('context', __brycomp_pybridge.received);
+doors.in('snippet-param', __brycomp_pybridge.param);
+doors.in('selected', __brycomp_pybridge.selected);
+doors.in('list', __brycomp_pybridge.list);
 doors.in('load', pyArg);
 
 // A spread's copy, each value converted: a fresh object, as a JavaScript spread
@@ -2317,7 +2317,7 @@ export function pyEvent(value) {
     // undefined there. The handler test claims more than handlers: `on`
     // followed by a lowercase letter also catches `once`, `only` and
     // `onboarding`, which Svelte 5 makes defensible for a component prop.
-    if (found === null) return __pybridge.bound(value);
+    if (found === null) return __brycomp_pybridge.bound(value);
 
     const { where } = found;
 
@@ -2355,7 +2355,7 @@ const ATTACHED = new WeakMap();
 export function pyAttach(value) {
     const found = declared(value);
 
-    if (found === null) return __pybridge.bound(value);
+    if (found === null) return __brycomp_pybridge.bound(value);
 
     const identity = pyHandler(value);
     let attach = ATTACHED.get(identity);
@@ -2471,7 +2471,7 @@ const returned = (value) => (callable(value) ? pyHandler(value) : pyNumbers(plai
 // the instance's API and not a framework's options, so it crosses as a prop's
 // value does (`bound`): a list or a dict as its live view, which a JavaScript
 // reader follows and writes, rather than the Brython object with its internals.
-const published = (value) => pyNumbers(__pybridge.bound(value));
+const published = (value) => pyNumbers(__brycomp_pybridge.bound(value));
 
 // Its length is what the function it calls declares: a Python function's
 // signature, or a JavaScript function's own `length`, which a decorator may
@@ -3921,7 +3921,7 @@ host.absent = (file, line, name, namespace) => {
 };
 
 // **A directive is a call whose callee is a Python expression.** The markup pass
-// writes `use:act.measured={v}` as `use:__directiveAction={["act.measured",
+// writes `use:act.measured={v}` as `use:__brycomp_directiveAction={["act.measured",
 // act.measured, v]}`: Svelte calls one function of this file, by a name that is
 // always there, and the head and the value are compiled like any template
 // expression, by the template's rules, in the scope they are written in. So a
@@ -4218,9 +4218,9 @@ function directiveCallable(member) {
 // `pep.title` inside the markup, on a dict.
 //
 // A template's expressions already differ from the same text in the script: a
-// `{#if}` goes through `__truthy` so an empty list is false the Python way, an
-// interpolation through `__text` so a list renders `['a', 'b']`, an iterable
-// through `__seq`, a spread through `__spread`. The dot joins them: it finds an
+// `{#if}` goes through `__brycomp_truthy` so an empty list is false the Python way, an
+// interpolation through `__brycomp_text` so a list renders `['a', 'b']`, an iterable
+// through `__brycomp_seq`, a spread through `__brycomp_spread`. The dot joins them: it finds an
 // attribute, and failing that a key, which is what Jinja does with `foo.bar` and
 // what anyone arriving from Django or Flask already expects.
 //
@@ -4466,7 +4466,7 @@ const sameTarget = (a, b) =>
 // all, a foreign JavaScript one, is only itself.
 const sameChoice = (one, mine) => {
     try {
-        return __pybridge.truthy(pyEquals(one, mine));
+        return __brycomp_pybridge.truthy(pyEquals(one, mine));
     } catch (error) {
         if (raised(error)) throw error;
 
@@ -4482,7 +4482,7 @@ const groupHolds = (model, value) => {
     if (model === undefined || model === null || model === NONE) return false;
 
     try {
-        return __pybridge.truthy(pyContains(model, value));
+        return __brycomp_pybridge.truthy(pyContains(model, value));
     } catch (error) {
         if (raised(error)) throw error;
 
@@ -4707,7 +4707,7 @@ export function group(node, given) {
         // built here reads as a JavascriptArray, which prints `[a, c]` where
         // Python prints `['a', 'c']` and refuses a slice.
         write(
-            __pybridge.list(node.checked ? picked : picked.filter((one) => !alike(one, mine)))
+            __brycomp_pybridge.list(node.checked ? picked : picked.filter((one) => !alike(one, mine)))
         );
     };
 
@@ -4715,7 +4715,7 @@ export function group(node, given) {
     // `[]` for checkboxes and, for every group of radios, its `null`, which is
     // `javascript.NULL` in Python as at every door, None being `undefined`. A
     // reset that wrote None also checked again a radio offering None.
-    const restored = () => write(boxes ? __pybridge.list([]) : null);
+    const restored = () => write(boxes ? __brycomp_pybridge.list([]) : null);
 
     node.addEventListener('change', changed);
     RESETS.set(node, restored);

@@ -9,13 +9,13 @@
 // the argument conversion arrived at two call boundaries out of three, and the
 // callback policy at one export route out of two. Both were silent.
 //
-// The generated module calls `__pyCall`, `__pyComponent`, `__pyEvent`,
-// `__pyExport` and the rest by name. What it must not do is spell what they do:
+// The generated module calls `__brycomp_pyCall`, `__brycomp_pyComponent`, `__brycomp_pyEvent`,
+// `__brycomp_pyExport` and the rest by name. What it must not do is spell what they do:
 // convert the arguments, start a coroutine, convert a result. The names below
 // are the ones that would say so, and they are read off `RUNTIME` rather than
 // written out here, so a boundary added to the map joins this guard by existing.
 //
-// `__plainData` is the exception and it is named as one: `to_js` is an injected
+// `__brycomp_plainData` is the exception and it is named as one: `to_js` is an injected
 // helper whose whole value is that function, so the generated module holds the
 // name without spelling a crossing.
 import { test, expect, describe } from 'vitest';
@@ -44,9 +44,9 @@ describe('the compiler emits no boundary of its own', () => {
     test.for(CROSSING.filter((one) => !INJECTED_AS_A_VALUE.has(one)))(
         'no generated line calls `%s`',
         (name) => {
-            // A call, and not the mention in the alias map: `__schedule(` with
-            // its parenthesis is what a wrapper written here would look like.
-            expect(source).not.toContain(`__${name}(`);
+            // A call, and not the mention in the alias map: `__brycomp_schedule(`
+            // with its parenthesis is what a wrapper written here would look like.
+            expect(source).not.toContain(`__brycomp_${name}(`);
         }
     );
 
@@ -57,9 +57,9 @@ describe('the compiler emits no boundary of its own', () => {
     // Python as an `Error` (`pyError`). `on_destroy` goes through
     // `pyComponent`, which starts an `async def`.
     test('and the wrappers it still writes take no argument and convert nothing', () => {
-        const written = [...source.matchAll(/catch \(err\) \{ throw (?:__pyError|\$\{RUNTIME\.pyError\}|\$\{host\.runtime\.pyError\})/g)];
+        const written = [...source.matchAll(/catch \(err\) \{ throw (?:__brycomp_pyError|\$\{RUNTIME\.pyError\}|\$\{host\.runtime\.pyError\})/g)];
 
         expect(written.length).toBe(2);
-        expect(source).not.toContain('.map(__pyArg)');
+        expect(source).not.toContain('.map(__brycomp_pyArg)');
     });
 });

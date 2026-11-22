@@ -4,8 +4,8 @@
 // Python call ever goes through: `store.bump()` works whatever the setter says,
 // which is exactly what hid this.
 //
-// The parameter was still named `v` while the body had moved to `__next`, so
-// every published setter of every store answered `ReferenceError: __next is not
+// The parameter was still named `v` while the body had moved to `__brycomp_next`, so
+// every published setter of every store answered `ReferenceError: __brycomp_next is not
 // defined` and the assignment did nothing. Found from the outside, by writing
 // to the store instead of calling it.
 import { test, expect, describe } from 'vitest';

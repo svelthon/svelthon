@@ -33,7 +33,7 @@ test('a store whose functions are named state and props imports and answers', as
 
     expect([module.state(), module.props(), module.answer()]).toEqual([42, 1, 7]);
     expect([module.default.state(), module.default.props()]).toEqual([42, 1]);
-    expect(code).not.toContain('__pyComponent(');
+    expect(code).not.toContain('__brycomp_pyComponent(');
 });
 
 test('a def named state or props mounts, renders and exports, as in Svelte', () => {

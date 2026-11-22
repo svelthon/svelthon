@@ -1,7 +1,7 @@
 // **An element a capital starts that holds a dash takes its class with
 // Python's truth**, as every element does: `onElement` asked for a lowercase
 // first letter where Svelte asks only that the tag be no component, so
-// `<Dashed-Probe class={classes}>` went without `__class`, and an empty list,
+// `<Dashed-Probe class={classes}>` went without `__brycomp_class`, and an empty list,
 // true in JavaScript, kept its class on.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';

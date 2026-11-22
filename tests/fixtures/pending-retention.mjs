@@ -6,12 +6,12 @@
 // copy kept as the value rebuilt.
 import * as devalue from 'devalue';
 import { transport, codecLoaded } from '../../src/lib/transport.js';
-import { __pybridge, pyData, pyBind } from '../../src/lib/bridge.js';
+import { __brycomp_pybridge, pyData, pyBind } from '../../src/lib/bridge.js';
 
 const $B = globalThis.__BRYTHON__;
 const CODEC = Symbol.for('svelthon.codec');
 const { encode, decode } = transport.svelthon;
-const made = devalue.stringify({ value: __pybridge.bound(pyData({ answer: [1, 2] })) }, { svelthon: encode });
+const made = devalue.stringify({ value: __brycomp_pybridge.bound(pyData({ answer: [1, 2] })) }, { svelthon: encode });
 const codec = globalThis[CODEC];
 const copies = [];
 const visit = () => {

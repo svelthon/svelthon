@@ -33,7 +33,7 @@ test.for([
 
 // And one assigned to such a name, by `=`, `??=` or a default of a pattern, is
 // named after it where it is evaluated: given back behind declarations alone,
-// it kept `__svelthon_state`. One that names itself keeps its own, and a
+// it kept `__brycomp_svelthon_state`. One that names itself keeps its own, and a
 // function's local is no binding held.
 test('a function or a class assigned to a name like a rune takes that name', async () => {
     const module = await import('./fixtures/ModuleRuneAssigned.svelte');
@@ -45,7 +45,7 @@ test('a function or a class assigned to a name like a rune takes that name', asy
 // Given back through the bridge: `Object.defineProperty` read the module's own
 // `Object`, and the component did not render. A class's before any static code
 // of its own: given back behind its declaration, a static field read
-// `__svelthon_state`, and a `static ['name']` was written over. And never over
+// `__brycomp_svelthon_state`, and a `static ['name']` was written over. And never over
 // a static method or accessor `name` of the author's, by whatever key.
 test('a function or a class named like a rune keeps its name, read before its declaration and while it is made too', async () => {
     const module = await import('./fixtures/ModuleRuneNames.svelte');

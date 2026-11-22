@@ -14,7 +14,7 @@ import { compile } from '../src/lib/compile.js';
 // same, each in the form a Python author writes it.
 //
 // The repair was already in the file, one line above the wound:
-// `helpers as __helpers`. Every one of them now arrives under a `__` spelling,
+// `helpers as __brycomp_helpers`. Every one of them now arrives under a `__` spelling,
 // which costs nothing at run time — generated code is their only reader.
 describe('a name the runtime lends the generated code', () => {
     const setup = () => {

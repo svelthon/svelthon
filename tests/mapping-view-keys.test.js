@@ -11,7 +11,7 @@ import { test, expect } from 'vitest';
 import { flushSync } from 'svelte';
 import { mount } from './mounted.js';
 import { growth, timed } from './growth.js';
-import { __pybridge, plainData, pyBind } from '../src/lib/bridge.js';
+import { __brycomp_pybridge, plainData, pyBind } from '../src/lib/bridge.js';
 import MappingKeys from './fixtures/MappingKeys.svelte';
 
 const $B = globalThis.__BRYTHON__;
@@ -32,7 +32,7 @@ test.for([
     const original = dict([[key(), 42]]);
     const copy = plainData(original);
 
-    for (const view of [__pybridge.bound(original), __pybridge.toContext(original)]) {
+    for (const view of [__brycomp_pybridge.bound(original), __brycomp_pybridge.toContext(original)]) {
         expect(Object.keys(view)).toEqual(Object.keys(copy));
         expect(view[name]).toBe(42);
         expect(JSON.parse(JSON.stringify(view))).toEqual(copy);
@@ -41,7 +41,7 @@ test.for([
 
 test('a write and a delete through the name reach the dict’s own key', () => {
     const original = dict([[7, 42]]);
-    const view = __pybridge.bound(original);
+    const view = __brycomp_pybridge.bound(original);
 
     view['7'] = 43;
     expect([$B.$getitem(original, 7), $B.builtins.len(original)]).toEqual([43, 1]);
@@ -54,8 +54,8 @@ test('two keys of one name are refused, as the copy refuses them', () => {
     const original = dict([[7, 42], ['7', 99]]);
 
     expect(() => plainData(original)).toThrow('two keys JavaScript cannot tell apart');
-    expect(() => Object.keys(__pybridge.bound(original))).toThrow('two keys JavaScript cannot tell apart');
-    expect(() => __pybridge.bound(original)['7']).toThrow('two keys JavaScript cannot tell apart');
+    expect(() => Object.keys(__brycomp_pybridge.bound(original))).toThrow('two keys JavaScript cannot tell apart');
+    expect(() => __brycomp_pybridge.bound(original)['7']).toThrow('two keys JavaScript cannot tell apart');
 });
 
 // Each name was looked for through every entry, so reading the whole view of a
@@ -66,7 +66,7 @@ test('two keys of one name are refused, as the copy refuses them', () => {
 test('a view of a dict of int keys reads whole in linear time', () => {
     const viewed = (n) => {
         const original = dict(Array.from({ length: n }, (_, at) => [at, at]));
-        const view = __pybridge.bound(original);
+        const view = __brycomp_pybridge.bound(original);
         let read;
         const spent = timed(() => {
             read = JSON.parse(JSON.stringify(view));
@@ -93,7 +93,7 @@ test('a symbol key is written, redefined and deleted as it is read', () => {
     const key = Symbol('metadata');
     const added = Symbol('added');
     const original = dict([[key, 42]]);
-    const view = __pybridge.bound(original);
+    const view = __brycomp_pybridge.bound(original);
     const witness = { [key]: 42 };
     const steps = (target) => [
         Reflect.set(target, key, 99),
@@ -108,7 +108,7 @@ test('a symbol key is written, redefined and deleted as it is read', () => {
     expect(steps(view)).toEqual(steps(witness));
     expect($B.$is_member(key, original)).toBe(false);
     expect($B.$getitem(original, added)).toBe(1);
-    expect(Reflect.set(__pybridge.bound($B.$list([1])), key, 2)).toBe(false);
+    expect(Reflect.set(__brycomp_pybridge.bound($B.$list([1])), key, 2)).toBe(false);
 });
 
 test('a JavaScript child handed the dict reads its key', () => {

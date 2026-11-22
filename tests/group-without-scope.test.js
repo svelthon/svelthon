@@ -10,7 +10,7 @@ test('a group action with no scope mounts', () => {
     node.type = 'checkbox';
     node.value = 'a';
 
-    // The model itself, as the compiled markup hands it (`__expr_py_N()`).
+    // The model itself, as the compiled markup hands it (`__brycomp_expr_py_N()`).
     let chosen = [];
     const write = (value) => {
         chosen = value;

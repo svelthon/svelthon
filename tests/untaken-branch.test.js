@@ -77,7 +77,7 @@ const handedLate = (markup) => {
 
     pythonExpressions(markup, collector(defs));
 
-    return defs.filter((one) => one.includes('7 if True else')).map((one) => /^def __expr_\w*_late\(/.test(one));
+    return defs.filter((one) => one.includes('7 if True else')).map((one) => /^def __brycomp_expr_\w*_late\(/.test(one));
 };
 
 test.for([

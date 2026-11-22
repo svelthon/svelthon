@@ -18,7 +18,8 @@ import {
     handedLate,
     computing as computingIn,
     costly as costlyIn,
-    JS_RESERVED
+    JS_RESERVED,
+    COMPILER_PREFIX
 } from 'brycomp';
 
 // The scanners below look for a closing character and have to know which
@@ -283,7 +284,7 @@ const WALRUS_ARROW = /^\s*:=\s*/;
 // refuses one on a subscript, where every other key was written. Null for a
 // part with three colons.
 //
-// The slice is the engine's, under the compiler's name (`__slice`): a `slice`
+// The slice is the engine's, under the compiler's name (`__brycomp_slice`): a `slice`
 // of the author's, a function or a number, was called in its place.
 //
 // **Each `lambda` takes the next colon**, as Python reads one: its body is an
@@ -326,7 +327,7 @@ function slices(inner) {
         const cuts = [-1, ...at, part.length];
         const bounds = cuts.slice(1).map((end, n) => part.slice(cuts[n] + 1, end).trim() || 'None');
 
-        return `__slice(${bounds.join(', ')})`;
+        return `__brycomp_slice(${bounds.join(', ')})`;
     });
 
     return written.includes(null) ? null : written.join(', ');
@@ -446,7 +447,7 @@ function walrusTarget(text) {
 // blanks of the same length, its strings kept: what Python reads between
 // tokens, written out. Left in, a comment between a name and its `:=` hid the
 // walrus, which Python then refused, and one after the value took the
-// parenthesis the rewrite closed with, `__assign("count", 7 # note)`.
+// parenthesis the rewrite closed with, `__brycomp_assign("count", 7 # note)`.
 function uncommented(text) {
     let out = '';
 
@@ -523,7 +524,7 @@ export function walrus(expression) {
                 // in xs)`, the walrus its element and the `for` its own clause:
                 // the value ends where the clause begins, and the clause stays
                 // in the parentheses, after the assignment. Taken for the value,
-                // the clause went into the call, `__assign("value", n for n in
+                // the clause went into the call, `__brycomp_assign("value", n for n in
                 // xs)`, which Python refuses.
                 let generator = false;
 
@@ -547,11 +548,11 @@ export function walrus(expression) {
                     // The receiver and the key are expressions too, rewritten
                     // as the value is: `(rows[(chosen := 1)] := 7)` sets
                     // `chosen` as well.
-                    if (found.name) return `__assign("${pythonName(found.name)}", ${value})${clause}`;
+                    if (found.name) return `__brycomp_assign("${pythonName(found.name)}", ${value})${clause}`;
 
                     const key = found.subscript ? walrus(found.key).trim() : found.key;
 
-                    return `${found.subscript ? '__setitem' : '__setattr'}(${walrus(found.object).trim()}, ${key}, ${value})${clause}`;
+                    return `${found.subscript ? '__brycomp_setitem' : '__brycomp_setattr'}(${walrus(found.object).trim()}, ${key}, ${value})${clause}`;
                 });
 
                 // One element was a grouping parenthesis and goes with it;
@@ -921,28 +922,28 @@ const SHORTHAND = new RegExp(`(?<=^|[\\s=/>"'}])((bind|class|style):(${SHORT_NAM
 const SHORTHAND_ATTRIBUTE = new RegExp(`^${SHORT_NAME}$`, 'u');
 
 // The action the generated script defines for it. Named here and emitted there,
-// like `__event`.
-const GROUP_ACTION = '__group';
+// like `__brycomp_event`.
+const GROUP_ACTION = '__brycomp_group';
 
 // The setter's parameter. Generated, so it only has to avoid the author's names.
-const BOUND_VALUE = '__value';
+const BOUND_VALUE = '__brycomp_value';
 
 // A name the markup declares and a `bind:group` writes, `{picked = []}` then
 // `bind:group={picked}`, gets a token declared beside it under this prefix: the
 // cell's own identity. Each row of an `{#each}` declares its own cell, and two
 // rows may hold equal values, `0` or one shared list, so the value cannot tell
 // their groups apart and the token does. Svelte keeps such rows apart too.
-const CELL = '__cell_';
+const CELL = '__brycomp_cell_';
 
 // The index an `{#each}` is given when a `bind:group` inside it needs one and
 // the author wrote none, this prefix and the block's scope. Svelte keeps a
 // group per iteration, by index: two rows holding one object are two groups,
 // which the values they hold cannot tell apart.
-const EACH_INDEX = '__index_';
+const EACH_INDEX = '__brycomp_index_';
 
 // What an `{#each}` walks, declared beside it under this prefix and the block's
-// scope (`__collection`, which the compiler writes).
-const EACH_ROWS = '__rows_';
+// scope (`__brycomp_collection`, which the compiler writes).
+const EACH_ROWS = '__brycomp_rows_';
 
 // The names a `bind:group` writes as a whole, `bind:group={picked}` or the
 // shorthand `bind:group`, read off the markup before the walk: a declaration
@@ -961,7 +962,7 @@ const groupedNames = (markup) =>
 
 // The module namespace the compiler binds beside the template. Named here and
 // emitted there, like `GROUP_ACTION`: the two have to agree.
-const NAMESPACE = '__py';
+const NAMESPACE = '__brycomp_py';
 
 // And the converter it crosses on its way into Python, named here and imported
 // there, like `GROUP_ACTION`.
@@ -971,24 +972,24 @@ const NAMESPACE = '__py';
 // `pyBind` or `follow` would be a word an author could not use for a name of
 // their own: `group`, `init`, `track` and `schedule` are words a Python author
 // writes.
-const BIND_VALUE = '__pyBind';
+const BIND_VALUE = '__brycomp_pyBind';
 
 // The same crossing for the array a `<select multiple>` writes back.
-const SELECTED_VALUE = '__pybridge.selected';
+const SELECTED_VALUE = '__brycomp_pybridge.selected';
 
 // The subscriber every compiled expression calls on the names it reads.
-const FOLLOW = '__follow';
+const FOLLOW = '__brycomp_follow';
 
 // How a value handed into Python is read, a snippet's parameter here as a
 // context's value in `get_context`.
-const RECEIVED = '__pybridge.received';
+const RECEIVED = '__brycomp_pybridge.received';
 
 // What a snippet's announcement is held under, numbered per snippet, since a
 // snippet inside another reads the outer one's parameters too.
-const SNIPPET_FRAME = '__snippet_';
+const SNIPPET_FRAME = '__brycomp_snippet_';
 
 // What a `{@debug}` hands Svelte's under each name, numbered per name.
-const DEBUGGED = '__debugged_';
+const DEBUGGED = '__brycomp_debugged_';
 
 // The whitespace from where it is asked for.
 const SPACE_AT = /\s*/y;
@@ -1051,7 +1052,7 @@ const opensFragment = (written) => {
 
 // The plain parameter Svelte hands a snippet's argument by, one per position,
 // which the snippet takes apart itself (`snippetParameters`).
-const SNIPPET_ARGUMENT = '__argument_';
+const SNIPPET_ARGUMENT = '__brycomp_argument_';
 
 // A handler takes a *callable*, and Python's is `lambda`. So its value is
 // compiled as Python like everything else, and what the expression yields is
@@ -1068,11 +1069,11 @@ const HANDLER = /^on/;
 // The wrapper the generated script defines for handlers. Named here and emitted
 // there, so the two have to agree: it exists to carry the component's line
 // offset, which the markup pass runs too early to know.
-const EVENT_WRAPPER = '__event';
+const EVENT_WRAPPER = '__brycomp_event';
 
 // And for `{@attach}`, whose return value has a consumer a handler's has not:
 // Svelte keeps it as the attachment's cleanup.
-const ATTACH_WRAPPER = '__attach';
+const ATTACH_WRAPPER = '__brycomp_attach';
 
 // `class:many={…}` is read for truthiness, so it needs Python's: an empty list
 // is false here and true in JavaScript, exactly as in `{#if}`.
@@ -1093,7 +1094,7 @@ const onElement = (tag) =>
 // which Svelte sets to the value as it is (`set_custom_element_data`):
 // `open={rows}` on `<my-list>` was handed the truth of the list, where Svelte
 // hands the list. `class` stays Svelte's `clsx` there too.
-const TRUTH_WRAPPERS = new Set(['__truthy', '__hidden']);
+const TRUTH_WRAPPERS = new Set(['__brycomp_truthy', '__brycomp_hidden']);
 
 // The names an attribute of the table is spelled by.
 const TRUTH_NAMES = [...BOOLEAN_ATTRIBUTES, ...BOOLEAN_PROPERTIES, 'hidden'];
@@ -1230,11 +1231,11 @@ const EQUALS_AHEAD = /\s*=/y;
 // The runtime function each kind is handed to, under the name the component
 // imports it by: the three differ in where Svelte puts the payload.
 const DIRECTIVE_ADAPTER = {
-    use: '__directiveAction',
-    transition: '__directiveTransition',
-    in: '__directiveTransition',
-    out: '__directiveTransition',
-    animate: '__directiveAnimate'
+    use: '__brycomp_directiveAction',
+    transition: '__brycomp_directiveTransition',
+    in: '__brycomp_directiveTransition',
+    out: '__brycomp_directiveTransition',
+    animate: '__brycomp_directiveAnimate'
 };
 
 // A tag's attribute in the unquoted spelling, `type=checkbox` or `value=a`,
@@ -1531,7 +1532,7 @@ function parameterPattern(part, call, names, tuple, unpack) {
 }
 
 // The name a row unpacked by key stands under, inside the block that unpacks it.
-const UNPACKED = '__unpacked_';
+const UNPACKED = '__brycomp_unpacked_';
 
 // `[first, second]`: a row unpacked by position, which Svelte destructures in
 // JavaScript, asking the row for JavaScript's protocol, which a `range`, a
@@ -1539,7 +1540,7 @@ const UNPACKED = '__unpacked_';
 // page, or raised on the server. So the brackets become one name, the row as
 // given; the row is taken apart once, as Svelte's `to_array` takes one and as
 // Python walks one of Python's, as far as the pattern names positions
-// (`__pybridge.positional`); and each element is read off it where it is read,
+// (`__brycomp_pybridge.positional`); and each element is read off it where it is read,
 // a default held as Svelte holds one, read once (`orDefault`). The one rule of
 // every positional pattern, a snippet's, an `{#each}`'s, a `then`'s and one
 // inside braces or brackets alike, where each had its own.
@@ -1554,7 +1555,7 @@ function unpackPositional(parts, call, names, tuple, unpack) {
 
     unpack.aliases.push(alias, row);
     unpack.rows.add(alias);
-    unpack.consts.push({ target: row, js: `__pybridge.positional(${alias}, ${named})`, once: true });
+    unpack.consts.push({ target: row, js: `__brycomp_pybridge.positional(${alias}, ${named})`, once: true });
 
     // The defaults, each with the names the elements after it bind.
     const defaults = [];
@@ -1656,7 +1657,7 @@ const misplaced = (text) =>
 // `[first, *others, last]`: a row unpacked by position around a starred name,
 // which Python's unpacking does and JavaScript's cannot, its rest being last or
 // nowhere, and an array. So the brackets become one name, the row, and the
-// targets one `{@const}` reading `__unpack(row, before, after)`: the engine's
+// targets one `{@const}` reading `__brycomp_unpack(row, before, after)`: the engine's
 // own unpacking of a starred target, the starred name a list, and its errors
 // for a row too short or not iterable. An array of JavaScript's is taken apart
 // in JavaScript, as a row without a star is, absent where it ends.
@@ -1689,18 +1690,18 @@ function unpackStarred(parts, call, names, tuple, unpack) {
 
     // An array of JavaScript's is taken apart in JavaScript, its elements kept as
     // they are and the rest a list, so that an absent one takes its default as
-    // without the star; any other row by Python (`__pybridge.starred`).
+    // without the star; any other row by Python (`__brycomp_pybridge.starred`).
     const after = elements.length - at - 1;
 
     // Each name before or after the star is read again where it is read
     // (`starredRead`, `unpacked`), the rest being a list of its own.
     unpack.consts[slot] = {
         target: `[${targets.join(', ')}]`,
-        js: `__pybridge.starred(${alias}, ${at}, ${after}, () => ${call(`__unpack(${alias}, ${at}, ${after})`, '', '', 'python')})`,
+        js: `__brycomp_pybridge.starred(${alias}, ${at}, ${after}, () => ${call(`__brycomp_unpack(${alias}, ${at}, ${after})`, '', '', 'python')})`,
         once: true,
         live: targets.flatMap((name, i) =>
             i !== at && DECLARED_NAME.test(name)
-                ? [{ name, read: `__pybridge.starredRead(${alias}, ${at}, ${after}, ${i}, () => ${name})` }]
+                ? [{ name, read: `__brycomp_pybridge.starredRead(${alias}, ${at}, ${after}, ${i}, () => ${name})` }]
                 : []
         )
     };
@@ -1718,7 +1719,7 @@ function unpackStarred(parts, call, names, tuple, unpack) {
 // where the dot raises the AttributeError.
 //
 // So the braces become one name, the row, and every key a `{@const}` of the
-// block reading `__getattr(row, key)`. A default is read only when the key is
+// block reading `__brycomp_getattr(row, key)`. A default is read only when the key is
 // missing, as Svelte reads it on `undefined`; a key may be computed,
 // `{[field.upper()]: value}`; the target may be a pattern itself; and
 // `**rest` is the dict of the keys not named, as it is in a `match`, a name and
@@ -1746,7 +1747,7 @@ function unpackByKey(inside, call, names, tuple, unpack) {
 
             unpack.consts.push({
                 target,
-                read: `__rest(${alias}, (${keys.map((one) => `${one}, `).join('')}))`,
+                read: `__brycomp_rest(${alias}, (${keys.map((one) => `${one}, `).join('')}))`,
                 source: '',
                 lazy: false,
                 once: true
@@ -1805,7 +1806,7 @@ function unpackByKey(inside, call, names, tuple, unpack) {
         // by its name.
         unpack.consts[slot] = {
             target: walked,
-            read: `__getattr(${alias}, ${named}${fallback === null ? '' : `, lambda: (${fallback})`})`,
+            read: `__brycomp_getattr(${alias}, ${named}${fallback === null ? '' : `, lambda: (${fallback})`})`,
             source: fallback ?? (computed ? key.slice(1, -1) : ''),
             lazy: fallback !== null,
             ...(unpack.rows.has(walked) ? { once: true } : {})
@@ -1844,12 +1845,12 @@ const entryValue = ({ read, source, lazy, missing, fallback, js, reaches }, call
           : orDefault(missing, call(fallback, '', undefined, 'lazy', [], followed));
 
 // A default as JavaScript takes one, where what it stands for is `undefined`,
-// or None, which is `undefined` at every door (`__pybridge.absent`): a row
+// or None, which is `undefined` at every door (`__brycomp_pybridge.absent`): a row
 // holding None showed `5:` where Svelte's holding `undefined` showed `5:5`.
 // What it stands for is read once: an element Svelte reads again at each read,
 // or one held behind a getter, was read twice where it was there, and a getter
 // that counts answered twice.
-const orDefault = (read, fallback) => `((__given) => (__pybridge.absent(__given) ? ${fallback} : __given))(${read})`;
+const orDefault = (read, fallback) => `((__brycomp_given) => (__brycomp_pybridge.absent(__brycomp_given) ? ${fallback} : __brycomp_given))(${read})`;
 
 // **A default reads a name an element after it binds as JavaScript does**:
 // raising while the default is taken, the name not bound yet, `ahead` in
@@ -1861,12 +1862,12 @@ const orDefault = (read, fallback) => `((__given) => (__pybridge.absent(__given)
 // of its own, the default read the script's `ahead`; raising at every read, a
 // function it made raised for ever; and under one token for every row, the
 // default of a second row raised in a function the first one made.
-const notYetBound = (name, read) => `__pybridge.ahead(__token, ${JSON.stringify(name)}, () => ${read})`;
+const notYetBound = (name, read) => `__brycomp_pybridge.ahead(__brycomp_token, ${JSON.stringify(name)}, () => ${read})`;
 
 const initializing = (reaches = [], fallback) =>
     reaches.length === 0
         ? fallback
-        : `((__token) => __pybridge.initializing(__token, () => ${fallback}))(__pybridge.token())`;
+        : `((__brycomp_token) => __brycomp_pybridge.initializing(__brycomp_token, () => ${fallback}))(__brycomp_pybridge.token())`;
 
 // **A field read by key with no default is read again at each read**, where
 // the block reads it, as Svelte reads a field it destructures in an `{#each}`
@@ -1973,7 +1974,7 @@ const destructured = (text, declare, call, tuple, refuse, again = null) => {
 // Python's.** Svelte is handed one plain parameter per position
 // (`SNIPPET_ARGUMENT`); the snippet's first act is its announcement (`frame`),
 // and only then is each position read into what the author wrote, a name, a
-// pattern or a default, by one `{@const}` each (`__pybridge.param`). Left to
+// pattern or a default, by one `{@const}` each (`__brycomp_pybridge.param`). Left to
 // Svelte, a pattern and a default were read before the announcement, which is
 // how a Python child rendering a Python parent's snippet knows to hand it
 // Python values: in development Svelte reads them at once to check them, and a
@@ -2025,14 +2026,14 @@ function snippetParameters(trimmed, declare, call, refuse, frame, identity = nul
     }
 
     // A bare parameter, a name with no default, declares nothing of its own:
-    // each read of it reads the argument again (`__pybridge.param`), as Svelte
+    // each read of it reads the argument again (`__brycomp_pybridge.param`), as Svelte
     // reads its own parameter at each read. Held in a derived, it kept the
     // first value until what that read changed, and `{@render
     // card(source.value)}` showed a value `source` had left.
     const bare = (part) => atTopLevel(part, (i) => part[i] === '=') === -1 && DECLARED_NAME.test(part.trim());
     const rereads = new Map(
         parts.flatMap((part, at) =>
-            bare(part) ? [[part.trim(), `__pybridge.param(${SNIPPET_ARGUMENT}${at}, ${frame}, ${at})`]] : []
+            bare(part) ? [[part.trim(), `__brycomp_pybridge.param(${SNIPPET_ARGUMENT}${at}, ${frame}, ${at})`]] : []
         )
     );
 
@@ -2064,7 +2065,7 @@ function snippetParameters(trimmed, declare, call, refuse, frame, identity = nul
         // nothing reads ahead: Svelte reads a `{@const}` as soon as it is
         // declared, in development, and the `{@render}` argument then ran where
         // its snippet's branch did not read it.
-        const row = `__pybridge.param(${argument}, ${frame}, ${at}${fallback})`;
+        const row = `__brycomp_pybridge.param(${argument}, ${frame}, ${at}${fallback})`;
 
         // But a row taken apart by key with no default of its own is read
         // again at each read of a field, as Svelte reads its parameter: held,
@@ -2081,7 +2082,7 @@ function snippetParameters(trimmed, declare, call, refuse, frame, identity = nul
 
     return (
         `${name}(${given.join(', ')})${trimmed.slice(close + 1)}}` +
-        `{let ${frame} = __pybridge.pythonSnippet(${identity ?? name})}${reads.join('')}`
+        `{let ${frame} = __brycomp_pybridge.pythonSnippet(${identity ?? name})}${reads.join('')}`
     );
 }
 
@@ -2137,10 +2138,10 @@ function trailingKey(text) {
 // iterable reads.
 //
 // **The block walks what a name declared beside it hands over**, `{const
-// __rows_… = __collection(…)}`, and not its iterable: the iterable is Python,
+// __brycomp_rows_… = __brycomp_collection(…)}`, and not its iterable: the iterable is Python,
 // and reads each name it mentions with everything under it, so a change inside
 // one row ran the block again over every row. The walk tells the block only
-// when the rows are no longer the same (`__pybridge.walk`), and the block runs
+// when the rows are no longer the same (`__brycomp_pybridge.walk`), and the block runs
 // again on a change of the list itself, as Svelte's does.
 function eachBlock(trimmed, declare, call, refuse, loop) {
     const head = trimmed.match(/^#each\s+([\s\S]+)$/);
@@ -2228,7 +2229,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
             }
         }
 
-        const iterable = call(walkedText, '__seq', undefined, 'python');
+        const iterable = call(walkedText, '__brycomp_seq', undefined, 'python');
 
         declare(indexed ? [index] : []);
         return (
@@ -2260,7 +2261,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
     // Kept Python: Svelte only walks it, and every row goes back to Python
     // expressions. Converted, it would be a fresh list each render, its floats
     // numbers, and a row would have no identity left to key by.
-    const iterable = call(body.slice(0, at), '__seq', undefined, 'python');
+    const iterable = call(body.slice(0, at), '__brycomp_seq', undefined, 'python');
     const target = keyed ? keyed[0] : named;
     const { pattern, unpack, consts } = destructured(target, declare, call, true, refuse, new Map());
 
@@ -2275,7 +2276,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
 
     // The key twice: as Svelte reads it, in the block, noted at its row's
     // place, and as the walk reads it again for a row that changed
-    // (`__pybridge.walk`), in a function taking what Svelte's takes, the row
+    // (`__brycomp_pybridge.walk`), in a function taking what Svelte's takes, the row
     // and its index.
     return (
         walked(loop.rows(), iterable, key === null ? null : `(${declared}) => ${key}`) +
@@ -2286,7 +2287,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
 }
 
 const walked = (rows, iterable, key) =>
-    `{const ${rows} = __collection(() => ${iterable}${key === null ? '' : `, ${key}`})}`;
+    `{const ${rows} = __brycomp_collection(() => ${iterable}${key === null ? '' : `, ${key}`})}`;
 
 // The key of an `{#each}` is computed outside the block, from the pattern's own
 // names, and a name unpacked by key or around a star is a derived of the block.
@@ -2319,7 +2320,7 @@ const walked = (rows, iterable, key) =>
 const IDENTIFIER = /[\p{XID_Start}_$][\p{XID_Continue}$]*/gu;
 
 function eachKey(key, unpack, call) {
-    const keyed = call(key, '__key', key, '', [], false);
+    const keyed = call(key, '__brycomp_key', key, '', [], false);
     const needed = new Set(freeNames(key).map(pythonName));
     const kept = new Set();
     let grew = true;
@@ -2432,27 +2433,22 @@ const targetKey = (expr) => {
     return node === null ? expr.trim() : key(node);
 };
 
-// The compiler's own prefix, written the same way `compile.js` writes it: a
-// name that begins with `__` and does not end with one, so Python's own dunders,
-// `__all__` and `__doc__`, stay free.
-//
-// The script half has refused a module-level name of this shape since the
-// beginning; the markup half declares names too and refused nothing. A
+// The compiler's own prefix, Brycomp's `COMPILER_PREFIX`, `__brycomp_`, refused
+// in the markup as in the script: the markup half declares names too. A
 // declaration spelled like one of the functions this pass appends emitted
 // `{let X = $state.raw(X())}`, where the name the author declared shadows the
 // very function that produces its value, and a block alias of that spelling put
 // the same collision one scope down. Svelte accepts both, so nothing was said.
 //
 // The spellings are not written out here: `tests/generated-names.test.js` reads
-// every `__name` this file holds, prose included, and asks the compiler to
+// every `__brycomp_name` this file holds, prose included, and asks the compiler to
 // define it.
-const COMPILER_PREFIX = /^__(?!.*__$)/;
 
 // The names `walrus()` writes for the plain form, read back so that a write
 // aimed at a markup name can be refused rather than sent to the wrong scope:
-// the first argument of each call to `__assign`, off the tree of what it
-// rewrote. Read off the text, `__assign("row"` in a string, or at the end of a
-// name, `record__assign("row", row)`, was taken for a write, and a handler that
+// the first argument of each call to `__brycomp_assign`, off the tree of what it
+// rewrote. Read off the text, `__brycomp_assign("row"` in a string, or at the end of a
+// name, `record__brycomp_assign("row", row)`, was taken for a write, and a handler that
 // wrote nothing was refused.
 function assignedNames(rewritten) {
     const $B = globalThis.__BRYTHON__;
@@ -2461,7 +2457,7 @@ function assignedNames(rewritten) {
         if (Array.isArray(node)) return node.forEach(visit);
         if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
 
-        if (node instanceof $B.ast.Call && node.func instanceof $B.ast.Name && node.func.id === '__assign') {
+        if (node instanceof $B.ast.Call && node.func instanceof $B.ast.Name && node.func.id === '__brycomp_assign') {
             const [first] = node.args;
 
             if (first instanceof $B.ast.Constant && typeof first.value === 'string') names.push(first.value);
@@ -2574,7 +2570,7 @@ const destructuringKeyword = (trimmed, at) =>
 // {**attrs}>`. Out in the body there is nothing for it to spread into, and
 // attached to a name there is one attribute where it wants many. Svelte refuses
 // that second spelling itself, `Unexpected token`, and the quoted third would
-// reach Brython as `__text(**attrs)` and come back as a syntax error about a
+// reach Brython as `__brycomp_text(**attrs)` and come back as a syntax error about a
 // comma, on a line the author never wrote.
 //
 // `**` cannot open a Python expression at all, so it is refused on sight. `...`
@@ -2680,7 +2676,7 @@ export function pythonExpressions(markup, collect, onPython, where) {
 
     const indexed = new Set();
 
-    walk(markup, () => '__probe', undefined, new Map(), named, where, indexed);
+    walk(markup, () => '__brycomp_probe', undefined, new Map(), named, where, indexed);
 
     return walk(markup, collect, onPython, named, null, where, indexed);
 }
@@ -2878,7 +2874,7 @@ function scopeChain(seed, indexed, refuseCompilerName) {
 
     // A snippet's parameter is handed over by whoever renders the snippet, a
     // JavaScript component or this markup, converted or not: it is read as
-    // every value coming into Python is (`__pybridge.received`), so a callable
+    // every value coming into Python is (`__brycomp_pybridge.received`), so a callable
     // Python handed out is itself again. The innermost scope holding the name
     // says whether it is one.
     const received = (name, followed = true) => {
@@ -3150,12 +3146,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         throw refuse(
             new SyntaxError(
-                `svelthon — \`${taken}\` starts with \`__\`, which is the compiler's own ` +
+                `svelthon — \`${taken}\` starts with \`__brycomp_\`, which is the compiler's own ` +
                     `prefix${said()}. The markup pass names the function behind every ` +
                     `expression with it, and declares that function in the scope your name ` +
                     `is declared in, so a name of that shape takes one of theirs: the ` +
-                    `declaration would read its own value from itself. Python's own names ` +
-                    `end with \`__\` as well, and those are free.`
+                    `declaration would read its own value from itself. Any other name is yours.`
             )
         );
     };
@@ -3474,7 +3469,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // So the parts are compiled here and joined here, under the rules the
     // attribute itself is built by, since the two have to give one string:
     //
-    // - each interpolation through `__text`, as the main pass compiles an
+    // - each interpolation through `__brycomp_text`, as the main pass compiles an
     //   attribute's: `None` is empty and `False` is `False`, where `String()`
     //   would give `None` and `false`;
     // - each literal decoded as Svelte decodes it, asked of Svelte's own parser:
@@ -3512,7 +3507,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         return pieces
             .map((one) =>
                 one.expression !== undefined
-                    ? call(one.expression, '__text')
+                    ? call(one.expression, '__brycomp_text')
                     : JSON.stringify(attributeText(one.literal, quote))
             )
             .join(' + ');
@@ -3527,7 +3522,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // as the last word on it (`selectMode`).
     //
     // What comes back is crossed the same way: the selection Svelte writes is
-    // an array, a list in Python (`__pybridge.selected`).
+    // an array, a list in Python (`__brycomp_pybridge.selected`).
     //
     // A name the markup declared is read the same way, its cell holding the
     // Python value, and written by the setter itself, see `declaredHere`.
@@ -3546,10 +3541,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // (`selectWrite`).
     // A binding writes back to what it binds, and a call, a literal or an
     // operation takes no write: Brython refused the setter written for it,
-    // `(c.upper()) = __value`, in the words of code the author never wrote.
+    // `(c.upper()) = __brycomp_value`, in the words of code the author never wrote.
     // Svelte's own rule, said in Python's: a name, an attribute or an item, or
     // the pair of functions Svelte takes (`functionPair`). A tuple to unpack
-    // the value into is none of them: `(a, b) = __value` unpacked typed text
+    // the value into is none of them: `(a, b) = __brycomp_value` unpacked typed text
     // into two names, two characters in silence and any other length raising.
     const WRITABLE = ['Name', 'Attribute', 'Subscript'];
 
@@ -3607,7 +3602,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
             const test = source.slice(offset(node.test.lineno, node.test.col_offset), offset(node.test.end_lineno, node.test.end_col_offset));
 
-            return `(${unmemoized(test, call(test, '__truthy'))} ? ${body} : ${orelse})`;
+            return `(${unmemoized(test, call(test, '__brycomp_truthy'))} ? ${body} : ${orelse})`;
         };
 
         return known(targetTree(source));
@@ -3620,24 +3615,24 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         const key = `${NAMESPACE}, ${tag.select}`;
 
-        return { action: `use:__pybridge.selectShape={[${key}]}`, key, read: `__select_${tag.select}` };
+        return { action: `use:__brycomp_pybridge.selectShape={[${key}]}`, key, read: `__brycomp_select_${tag.select}` };
     };
 
     // The two halves of a function binding are evaluated once, where the
     // binding is made, as Svelte evaluates them, and the read and the write
-    // call the functions they gave, handed in as they are (`__get`, `__put`):
+    // call the functions they gave, handed in as they are (`__brycomp_get`, `__brycomp_put`):
     // `make_put()` evaluated by every write made a new setter per keystroke,
     // and a count its closure kept started over.
     const heldRead = (wrapper, kind) => {
         const at = position();
 
-        return `${collect('__get()', wrapper, ['__get'], false, at?.line, kind, at?.column)}(__get)`;
+        return `${collect('__brycomp_get()', wrapper, ['__brycomp_get'], false, at?.line, kind, at?.column)}(__brycomp_get)`;
     };
 
     const heldWrite = (crossing) => {
         const at = position();
 
-        return `${collect('__put', '', ['__put'], 'call', at?.line, '', at?.column)}(${crossing}(${BOUND_VALUE}), __put)`;
+        return `${collect('__brycomp_put', '', ['__brycomp_put'], 'call', at?.line, '', at?.column)}(${crossing}(${BOUND_VALUE}), __brycomp_put)`;
     };
 
     const boundPair = (directive, expr) => {
@@ -3649,22 +3644,22 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const reading = (wrapper, kind) => (pair === null ? call(expr, wrapper, undefined, kind) : heldRead(wrapper, kind));
         const written = (crossing) =>
             pair !== null ? heldWrite(crossing) : declaredHere(expr) ? declaredWrite(expr, crossing) : assign(expr, crossing);
-        const getter = (text) => (pair === null ? text : `((__get) => ${text})(${call(pair[0], '', undefined, 'python')})`);
+        const getter = (text) => (pair === null ? text : `((__brycomp_get) => ${text})(${call(pair[0], '', undefined, 'python')})`);
         const setter = (write) => {
             const text = `(${BOUND_VALUE}) => ${write}`;
 
-            return pair === null ? text : `((__put) => ${text})(${call(pair[1], '', undefined, 'python')})`;
+            return pair === null ? text : `((__brycomp_put) => ${text})(${call(pair[1], '', undefined, 'python')})`;
         };
 
         const shaped = spreadSelect(directive, expr);
 
         if (shaped !== null) {
-            const crossing = `__pybridge.selectWrite(${shaped.key})`;
+            const crossing = `__brycomp_pybridge.selectWrite(${shaped.key})`;
             const write = written(crossing);
-            const value = reading('__bound', 'child');
+            const value = reading('__brycomp_bound', 'child');
 
             return (
-                `${getter(`function ${shaped.read}() { return __pybridge.selectRead(${value}, ${shaped.key}, ${shaped.read}); }`)}, ` +
+                `${getter(`function ${shaped.read}() { return __brycomp_pybridge.selectRead(${value}, ${shaped.key}, ${shaped.read}); }`)}, ` +
                 setter(write)
             );
         }
@@ -3673,7 +3668,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
         const write = written(crossing);
         if (heldChild() !== null) {
-            return `${getter(`() => ${forChild(reading('__bound', 'child'), 'scalar')}`)}, ${setter(write)}`;
+            return `${getter(`() => ${forChild(reading('__brycomp_bound', 'child'), 'scalar')}`)}, ${setter(write)}`;
         }
 
         // A binding Svelte reads for truth, on an element: the Python value,
@@ -3684,11 +3679,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // An element's read crosses a derived of its own (`boundRead`): a
         // value that has not changed hands the element nothing.
         if (onElement(tag) && truthBinding(directive.slice('bind:'.length))) {
-            return `${getter(`__pybridge.boundRead(() => __pybridge.boundTruth(${reading('', 'python')}))`)}, ${setter(write)}`;
+            return `${getter(`__brycomp_pybridge.boundRead(() => __brycomp_pybridge.boundTruth(${reading('', 'python')}))`)}, ${setter(write)}`;
         }
 
         const read = multiple ? 'selection' : toPythonChild() ? 'child' : 'scalar';
-        const reader = `() => ${reading('__bound', read)}`;
+        const reader = `() => ${reading('__brycomp_bound', read)}`;
 
         // And so does what `<svelte:window>` and `<svelte:document>` bind: a
         // window scrolled on one axis had its other axis set back to the value
@@ -3699,7 +3694,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // `bind:this={row.ref}` in an `{#each}` raised as the component mounted.
         const derived = tag !== null && !isComponent(tag) && directive !== 'bind:this';
 
-        return `${getter(derived ? `__pybridge.boundRead(${reader})` : reader)}, ${setter(write)}`;
+        return `${getter(derived ? `__brycomp_pybridge.boundRead(${reader})` : reader)}, ${setter(write)}`;
     };
 
     // Whether the tag being read is a child written in Python, which is handed
@@ -3721,7 +3716,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // from a package, a module that re-exports it or a namespace, or the
     // `this` of `<svelte:component>`. Null for a tag its file names. Its
     // language is known only once it is handed: each prop is made Python and
-    // converted for that child, `__pybridge.child`. The child is read once, as
+    // converted for that child, `__brycomp_pybridge.child`. The child is read once, as
     // Svelte reads a tag, into a name of its own (`heldTag`), unless it is an
     // import's own name, which reads again with nothing run (`wrap`).
     const heldSource = (one) => {
@@ -3749,7 +3744,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             one.thisFrom = value.start - 1;
             one.thisTo = value.end;
             region = { start, end };
-            const read = call(markup.slice(start, end), '__bound');
+            const read = call(markup.slice(start, end), '__brycomp_bound');
             region = null;
             return { read, wrap: true };
         }
@@ -3765,14 +3760,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // or a class's name as the property of that name, undefined, and the
         // child was not there, and a child put in its place was not read
         // again.
-        if (rest.length > 0) return { read: call(one.name, '__bound'), wrap: true };
+        if (rest.length > 0) return { read: call(one.name, '__brycomp_bound'), wrap: true };
 
         // And a child held by a name, of the markup or of the script, is read
         // the same way: as Python reads the name, `<Ｃard />` being `Card`,
         // and handed over as Svelte takes a child, `None` as no child at all.
         // Read as JavaScript, the first was not defined and the second was
         // called.
-        if (local !== null) return { read: call(one.name, '__bound'), wrap: true };
+        if (local !== null) return { read: call(one.name, '__brycomp_bound'), wrap: true };
         if (where?.imported === undefined) return null;
 
         // A child named by its own file is known; an import read again is
@@ -3780,7 +3775,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (rest.length === 0 && (where.pythonChildren.has(head) || where.javascriptChildren.has(head))) return null;
         if (where.imported.has(head)) return { read: one.name, wrap: false };
 
-        return { read: call(one.name, '__bound'), wrap: true };
+        return { read: call(one.name, '__brycomp_bound'), wrap: true };
     };
     // Every name of the component as Python reads it, as a snippet's is
     // declared: `𝓢velthonElement0` is `SvelthonElement0` to Python. Its
@@ -3820,7 +3815,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     let selects = 0;
 
     const heldChild = () => tag?.held ?? null;
-    const forChild = (read, kind = '') => `__pybridge.child(${heldChild()}, ${read}, ${JSON.stringify(kind)})`;
+    const forChild = (read, kind = '') => `__brycomp_pybridge.child(${heldChild()}, ${read}, ${JSON.stringify(kind)})`;
 
     // Whether the tag is a custom element, as Svelte tells one
     // (`is_custom_element_node`): an element whose name holds a dash, or that
@@ -3868,7 +3863,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         if (value.braced) {
             region = { start, end };
-            read = call(markup.slice(start, end), '__bound');
+            read = call(markup.slice(start, end), '__brycomp_bound');
         } else {
             const open = markup.indexOf('{', start);
             const lone = loneInterpolation(markup, start - 1, closingBrace);
@@ -3877,7 +3872,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 start = open + 1;
                 end = lone - 1;
                 region = { start, end };
-                read = call(markup.slice(start, end), '__bound');
+                read = call(markup.slice(start, end), '__brycomp_bound');
             } else {
                 region = { start, end };
                 read = quotedValue(markup.slice(start, end), value.quote);
@@ -4032,7 +4027,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const checked =
             names !== null && (names.has('checked') || names.has('bind:checked'))
                 ? ''
-                : ` checked={__pybridge.groupChecked(() => ${read}, () => ${served}, ${boxes})}`;
+                : ` checked={__brycomp_pybridge.groupChecked(() => ${read}, () => ${served}, ${boxes})}`;
 
         // And whether the field evaluates its value, which any value but static
         // text is, braced, the shorthand, or text between quotes holding an
@@ -4061,12 +4056,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // and answers `bind:group can only bind to an Identifier or MemberExpression`.
     //
     // So the pair any other binding has, crossing as it does, is handed over
-    // as a member of a name, which it accepts, see `__pybridge.pair`.
+    // as a member of a name, which it accepts, see `__brycomp_pybridge.pair`.
     //
     // Anything but a name is refused rather than guessed.
     const componentGroup = (target) => {
         if (bareName(target) !== null) {
-            return `__pybridge.crossing[__pybridge.pair(${boundPair('bind:group', target)})]`;
+            return `__brycomp_pybridge.crossing[__brycomp_pybridge.pair(${boundPair('bind:group', target)})]`;
         }
 
         throw refuse(
@@ -4100,7 +4095,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
     // A binding's write to a name the markup declared, Svelte's cell: the value
     // crossed into Python, and followed as the declaration's is
-    // (`__pybridge.state`), or a list a child put there and then let go of
+    // (`__brycomp_pybridge.state`), or a list a child put there and then let go of
     // repainted nothing when it changed.
     //
     // A bare parameter of a snippet is no cell, read where it is written
@@ -4129,7 +4124,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             );
         }
 
-        return `${scoped(bareName(expr))} = __pybridge.state(${crossing}(${BOUND_VALUE}))`;
+        return `${scoped(bareName(expr))} = __brycomp_pybridge.state(${crossing}(${BOUND_VALUE}))`;
     };
 
     // `(x := …)` writes through the namespace, which holds the module's names
@@ -4168,7 +4163,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // One that calls nothing (`callsAnything`) is read from a derived of its
     // own while it reads only Python's, which tells of its changes, and afresh
     // at each render once it reads JavaScript's own data, which nothing
-    // follows (`__pybridge.reading`): written with no call, which Svelte holds
+    // follows (`__brycomp_pybridge.reading`): written with no call, which Svelte holds
     // in no derived of its own, and naming the derived, which tells Svelte the
     // value moves. Read afresh whatever it read, thirty of them cost a page
     // that renders often three times what Svelte's cost, and a hundred rows
@@ -4192,20 +4187,20 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // (`should_wrap_in_derived`), and so is the whole value between quotes it
     // is part of (`held`); a spread Svelte reads again unless it calls
     // something. The getter tells a Python child that its parent is Python,
-    // which weighed its own reads of JavaScript's data (`__pybridge.handed`),
+    // which weighed its own reads of JavaScript's data (`__brycomp_pybridge.handed`),
     // so that the child takes no read of it for one no signal follows.
     const unmemoized = (inner, read, text = false, handed = false) => {
-        const called = /^(__expr_\w+)\(/.exec(read);
+        const called = /^(__brycomp_expr_\w+)\(/.exec(read);
         const calls = callsAnything(inner);
 
-        // Weighed in its derived (`__pybridge.reading`), and afresh beside it
+        // Weighed in its derived (`__brycomp_pybridge.reading`), and afresh beside it
         // by a getter made once with what it reads: made at each read, with
         // the functions it hands, a Python child of a JavaScript parent paid
         // for them at each render.
-        const memo = (name) => `{const ${name}_memo = $derived(__pybridge.reading(__expr_reread, '${name}', () => ${read}))}`;
+        const memo = (name) => `{const ${name}_memo = $derived(__brycomp_pybridge.reading(__brycomp_expr_reread, '${name}', () => ${read}))}`;
         const reader = (name, value) =>
             `{const ${name}_read = { expression: () => ${read}, held: () => ${name}_memo, get value() { return ${value}; } }}`;
-        const afresh = (name) => `__pybridge.reading(__expr_reread, '${name}', this.expression, this.held)`;
+        const afresh = (name) => `__brycomp_pybridge.reading(__brycomp_expr_reread, '${name}', this.expression, this.held)`;
 
         if (handed && called !== null) {
             const name = called[1];
@@ -4214,8 +4209,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             chain.memoRow(
                 again
                     ? memo(name) +
-                          reader(name, `__pybridge.handed(__expr_reread.${name} ? ${afresh(name)} : ${name}_memo)`)
-                    : `{const ${name}_memo = $derived(${read})}{const ${name}_read = { get value() { return __pybridge.handed(${name}_memo); } }}`,
+                          reader(name, `__brycomp_pybridge.handed(__brycomp_expr_reread.${name} ? ${afresh(name)} : ${name}_memo)`)
+                    : `{const ${name}_memo = $derived(${read})}{const ${name}_read = { get value() { return __brycomp_pybridge.handed(${name}_memo); } }}`,
                 mentioned(inner.trim())
             );
 
@@ -4229,7 +4224,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
             chain.memoRow(memo(name) + reader(name, afresh(name)), mentioned(inner.trim()));
 
-            return `(__expr_reread.${name} ? ${name}_read.value : ${name}_memo)`;
+            return `(__brycomp_expr_reread.${name} ? ${name}_read.value : ${name}_memo)`;
         }
 
         return text && mentioned(inner.trim()).some((one) => chain.reread(one) !== null) ? `({ get value() { return ${read}; } }).value` : read;
@@ -4273,7 +4268,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const rendered = (inner, handed = false) => {
         refuseEmpty(inner);
 
-        return unmemoized(inner, call(inner, '__text'), true, handed);
+        return unmemoized(inner, call(inner, '__brycomp_text'), true, handed);
     };
 
     // What an attribute's value compiles to, by its name and the tag it is on.
@@ -4308,9 +4303,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             if (heldChild() !== null) {
                 const again = !callsAnything(inner) && readByMember(inner);
 
-                return `{${readThrough(inner, call(rewritten, '__bound', inner, 'child'), (read) => forChild(read), again)}}`;
+                return `{${readThrough(inner, call(rewritten, '__brycomp_bound', inner, 'child'), (read) => forChild(read), again)}}`;
             }
-            if (isComponent(tag)) return `{${unmemoized(inner, call(rewritten, '__bound', inner, toPythonChild() ? 'child' : ''), false, 'prop')}}`;
+            if (isComponent(tag)) return `{${unmemoized(inner, call(rewritten, '__brycomp_bound', inner, toPythonChild() ? 'child' : ''), false, 'prop')}}`;
 
             const adapted = `${EVENT_WRAPPER}(${call(rewritten, '', inner)})`;
 
@@ -4325,14 +4320,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             return calledAtTop(inner) ? `{${adapted}}` : `{${adapted} ?? undefined}`;
         }
 
-        if (CLASS_DIRECTIVE.test(name)) return `{${unmemoized(inner, call(inner, '__truthy'))}}`;
+        if (CLASS_DIRECTIVE.test(name)) return `{${unmemoized(inner, call(inner, '__brycomp_truthy'))}}`;
 
         // `--rate={value}` on a component is no prop of the child's: Svelte
         // writes it into the wrapper it makes around the child, a CSS custom
         // property JavaScript reads. Crossed as for a JavaScript child, whatever
         // the child is written in: kept Python for a Python child, a float was
         // written `[object Object]` into the style.
-        if (name.startsWith('--') && (isComponent(tag) || heldChild() !== null)) return `{${unmemoized(inner, call(inner, '__bound'))}}`;
+        if (name.startsWith('--') && (isComponent(tag) || heldChild() !== null)) return `{${unmemoized(inner, call(inner, '__brycomp_bound'))}}`;
 
         // `class`, which Svelte hands to `clsx`, and the boolean attributes,
         // which the DOM reads for truth: both read Python's truth instead.
@@ -4340,16 +4335,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         // On a `<svelte:element>` whose name is known as it renders, the value
         // goes as it is to a custom element and as its truth to any other,
-        // asked of that name (`__pybridge.element`), read through a getter
-        // (`readThrough`) from a box made anew at each read (`__boxed`): held
+        // asked of that name (`__brycomp_pybridge.element`), read through a getter
+        // (`readThrough`) from a box made anew at each read (`__brycomp_boxed`): held
         // in a derived, a field of a JavaScript object changed in place left a
         // button enabled that Svelte's disabled, and the list itself, changed
         // in place, would have been the same value to Svelte.
         if (tag?.element !== undefined && TRUTH_WRAPPERS.has(wrapper)) {
-            return `{${readThrough(inner, call(inner, '__boxed', undefined, 'python'), (boxed) => `__pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${boxed}[0], ${JSON.stringify(name)})`)}}`;
+            return `{${readThrough(inner, call(inner, '__brycomp_boxed', undefined, 'python'), (boxed) => `__brycomp_pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${boxed}[0], ${JSON.stringify(name)})`)}}`;
         }
 
-        const known = wrapper === '__class' && tag?.element === undefined ? knownClass(inner) : null;
+        const known = wrapper === '__brycomp_class' && tag?.element === undefined ? knownClass(inner) : null;
 
         if (known !== null) return `{${known}}`;
         if (wrapper) return `{${onElement(tag) ? unmemoized(inner, call(inner, wrapper)) : call(inner, wrapper)}}`;
@@ -4372,7 +4367,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             const kind = name === 'value' ? 'scalar' : '';
             const again = !callsAnything(inner) && readByMember(inner);
 
-            return `{${readThrough(inner, call(inner, '__bound', undefined, 'child'), (read) => forChild(read, kind), again)}}`;
+            return `{${readThrough(inner, call(inner, '__brycomp_bound', undefined, 'child'), (read) => forChild(read, kind), again)}}`;
         }
 
         const grouped = !isComponent(tag) && tag !== null && tagNames(markup, tag.start).has('bind:group');
@@ -4383,16 +4378,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // (`rendered`), one value having one rendering; `style` stays Svelte's,
         // and a custom element's property takes the value as it is, as does
         // one of a `<svelte:element>` whose name makes a custom element as it
-        // renders (`__pybridge.element`).
+        // renders (`__brycomp_pybridge.element`).
         if (kind === '' && onElement(tag) && !custom(tag) && name !== 'style') {
             if (tag.element !== undefined) {
-                return `{${readThrough(inner, call(inner, '__boxed', undefined, 'python'), (boxed) => `__pybridge.element(${tag.element}, "__attr", ${boxed}[0], ${JSON.stringify(name)})`)}}`;
+                return `{${readThrough(inner, call(inner, '__brycomp_boxed', undefined, 'python'), (boxed) => `__brycomp_pybridge.element(${tag.element}, "__brycomp_attr", ${boxed}[0], ${JSON.stringify(name)})`)}}`;
             }
 
-            return `{${unmemoized(inner, call(inner, '__attr'))}}`;
+            return `{${unmemoized(inner, call(inner, '__brycomp_attr'))}}`;
         }
 
-        const read = call(inner, '__bound', undefined, kind);
+        const read = call(inner, '__brycomp_bound', undefined, kind);
 
         return `{${onElement(tag) ? unmemoized(inner, read) : isComponent(tag) ? unmemoized(inner, read, false, 'prop') : read}}`;
     };
@@ -4428,7 +4423,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             if (quote) {
                 // `class="badge {statut.lower()}"`, an interpolation inside a
                 // quoted attribute value. Svelte concatenates it into a string,
-                // so it renders like any other text and goes through __text.
+                // so it renders like any other text and goes through __brycomp_text.
                 // A lone one, `data="{value}"`, is the value itself, as Svelte
                 // reads it, and compiles as the bare spelling does, between the
                 // author's quotes: Svelte warns about those on a component as
@@ -4522,7 +4517,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const read = value === null ? '' : call(markup.slice(value.start, value.end), '', undefined, 'python');
                 // An action's value is read through as Svelte reads it, where
                 // Svelte watches it (`watched`): the array hides it from Svelte.
-                const argument = value === null ? '' : kind === 'use' ? `, __pybridge.watched(${read})` : `, ${read}`;
+                const argument = value === null ? '' : kind === 'use' ? `, __brycomp_pybridge.watched(${read})` : `, ${read}`;
 
                 region = null;
                 // The head as a thunk: read by the adapter when the directive is
@@ -4645,16 +4640,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // written in Python, each value is handed over as a
                         // prop written by name is, the Python value itself.
                         const spreadWrapper = !onElement(tag)
-                            ? '__spread'
+                            ? '__brycomp_spread'
                             : tagNames(markup, tag.start).has('bind:group')
-                              ? '__spreadChoice'
+                              ? '__brycomp_spreadChoice'
                               : custom(tag)
-                                ? '__spreadCustom'
-                                : '__spreadElement';
+                                ? '__brycomp_spreadCustom'
+                                : '__brycomp_spreadElement';
 
                         // And on a `<svelte:element>` whose name is known as it
                         // renders, each key asked of that name, as an attribute
-                        // written by name is (`__pybridge.elementSpread`).
+                        // written by name is (`__brycomp_pybridge.elementSpread`).
                         //
                         // On an element, read where Svelte reads its own spread,
                         // with the element's other attributes, as any value of
@@ -4663,7 +4658,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // enabled that Svelte's disabled. The call naming the
                         // element is read through a getter (`readThrough`), from
                         // the entries the spread reads, a fresh object at each
-                        // read (`__spreadEntries`): the dict itself, the derived
+                        // read (`__brycomp_spreadEntries`): the dict itself, the derived
                         // held the same object once it was changed in place,
                         // which Svelte took for no change. On a component, as
                         // any prop is, each time the child reads one, and from
@@ -4683,11 +4678,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                         out +=
                             heldChild() !== null
-                                ? `{...${readThrough(spreadExpression, call(spreadExpression, '__spreadEntries', undefined, 'python'), (entries) => forChild(entries, 'spread'))}}`
+                                ? `{...${readThrough(spreadExpression, call(spreadExpression, '__brycomp_spreadEntries', undefined, 'python'), (entries) => forChild(entries, 'spread'))}}`
                                 : toPythonChild()
-                                  ? `{...${unmemoized(spreadExpression, call(spreadExpression, '__spreadPython', undefined, 'python'), false, 'spread')}}`
+                                  ? `{...${unmemoized(spreadExpression, call(spreadExpression, '__brycomp_spreadPython', undefined, 'python'), false, 'spread')}}`
                                   : tag?.element !== undefined
-                                    ? `{...${readThrough(spreadExpression, call(spreadExpression, '__spreadEntries', undefined, 'python'), (entries) => `__pybridge.elementSpread(${tag.element}, ${entries}, __event, ${spreadWrapper === '__spreadChoice'})`)}}`
+                                    ? `{...${readThrough(spreadExpression, call(spreadExpression, '__brycomp_spreadEntries', undefined, 'python'), (entries) => `__brycomp_pybridge.elementSpread(${tag.element}, ${entries}, __brycomp_event, ${spreadWrapper === '__brycomp_spreadChoice'})`)}}`
                                     : onElement(tag) || isComponent(tag)
                                       ? `{...${unmemoized(spreadExpression, call(spreadExpression, spreadWrapper), false, isComponent(tag) && 'spread')}}`
                                       : `{...${call(spreadExpression, spreadWrapper)}}`;
@@ -4938,7 +4933,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // so it is compiled before the block's scope opens: a snippet of
             // the body, preloaded into that scope, is not a name the head sees.
             if (opens('if')) {
-                const condition = call(opened.rest, '__truthy');
+                const condition = call(opened.rest, '__brycomp_truthy');
 
                 push([]);
                 out += `{#if ${condition}}`;
@@ -4959,9 +4954,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 });
             } else if (opens('key')) {
                 // Svelte re-creates the block when the value changes, by
-                // identity: `__key` keeps it for a container and an instance,
+                // identity: `__brycomp_key` keeps it for a container and an instance,
                 // and gives a value rebuilt each time its repr().
-                const keyed = call(opened.rest, '__key');
+                const keyed = call(opened.rest, '__brycomp_key');
 
                 push([]);
                 out += `{#key ${keyed}}`;
@@ -5099,7 +5094,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             };
 
             const elseIf = /^:else\s+if\s/.test(trimmed);
-            const condition = elseIf ? call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy') : null;
+            const condition = elseIf ? call(trimmed.replace(/^:else\s+if\s/, ''), '__brycomp_truthy') : null;
 
             seeded();
 
@@ -5121,8 +5116,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
             if (holds('html')) {
                 // Python's text, but for the `TrustedHTML` a policy made
-                // (`__pybridge.html`).
-                out += `{@html ${call(written.rest, '__html')}}`;
+                // (`__brycomp_pybridge.html`).
+                out += `{@html ${call(written.rest, '__brycomp_html')}}`;
             } else if (holds('render')) {
                 // The snippet itself is a JavaScript function and stays one.
                 // Its call is the last group of the expression (`renderedCall`),
@@ -5138,7 +5133,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // Whose it is is told by its name only when the name is one of
                 // this markup's snippets. Anything else, `children`, an alias, an
                 // attribute or a key, is decided at the render by the snippet
-                // itself (`__pybridge.snippet`): a parent written in Python
+                // itself (`__brycomp_pybridge.snippet`): a parent written in Python
                 // declared its own, which say so as they run. And a callee that
                 // is not one of them is a Python expression, read as Python
                 // reads it: `holder.fn` is an attribute, not a JavaScript
@@ -5163,7 +5158,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const rendered =
                     named && owns.some((one) => sameName(one, callee))
                         ? head.replace(spelled, callee)
-                        : `__pybridge.snippet(${call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
+                        : `__brycomp_pybridge.snippet(${call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
                 const given = (one) => {
                     if (!one.trim()) return one;
 
@@ -5222,7 +5217,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     const held = named.map(() => `${DEBUGGED}${debugCount++}`);
                     const block =
                         `{#if true}` +
-                        named.map((one, at) => derivedTag(held[at], `__pybridge.debugged(${call(one, '', undefined, 'python')})`)).join('') +
+                        named.map((one, at) => derivedTag(held[at], `__brycomp_pybridge.debugged(${call(one, '', undefined, 'python')})`)).join('') +
                         `{#if true}` +
                         named.map((one, at) => derivedTag(one, held[at])).join('') +
                         `{@debug ${names.join(', ')}}{/if}{/if}`;
@@ -5332,10 +5327,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const value = call(declared.expression, '', undefined, 'python');
 
                 // A value the block declares is followed through what is
-                // inside it (`__pybridge.state`).
+                // inside it (`__brycomp_pybridge.state`).
                 out +=
                     declared.rune === 'state'
-                        ? `{let ${declared.name} = $state.raw(__pybridge.state(${value}))}`
+                        ? `{let ${declared.name} = $state.raw(__brycomp_pybridge.state(${value}))}`
                         : `{const ${declared.name} = $derived(${value})}`;
 
                 if (record) {
@@ -5388,7 +5383,7 @@ export function pythonRanges(content) {
     overMarkup(content, (markup, offset) => {
         pythonExpressions(
             markup,
-            () => `__range_${n++}`,
+            () => `__brycomp_range_${n++}`,
             (from, to) => ranges.push({ from: offset + from, to: offset + to })
         );
 
@@ -5522,7 +5517,7 @@ export function collector(defs, lines, columns, texts) {
         const key = `${assign ? 'set' : kind || 'get'}|${late}|${wrapper}|${args.join(',')}|${line}:${column}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
-        // Every kind keeps the `__expr_` prefix: it is what makes the generated
+        // Every kind keeps the `__brycomp_expr_` prefix: it is what makes the generated
         // wrapper evaluate them the way a template expression is evaluated. The
         // part after it is what the compiler reads the kind from: `lazy_` and
         // `py_`, whose value stays Python, and `child_`, a prop a Python child
@@ -5538,7 +5533,7 @@ export function collector(defs, lines, columns, texts) {
                 : kind === 'scalar' || kind === 'selection' || kind === 'choice' || kind === 'child'
                   ? `${kind}_`
                   : '';
-        const name = `__expr_${infix}${defs.length}${late ? '_late' : ''}`;
+        const name = `__brycomp_expr_${infix}${defs.length}${late ? '_late' : ''}`;
         seen.set(key, name);
         lines?.push(line);
         columns?.push(column);

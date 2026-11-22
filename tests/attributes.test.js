@@ -36,7 +36,7 @@ test('the boolean properties Svelte sets are read for truth', () => {
     const properties = names(utils.match(/const DOM_PROPERTIES = \[([^\]]*)\]/)[1]);
     const values = ['value', 'volume', 'defaultValue', 'srcObject'];
 
-    expect(properties.filter((name) => !values.includes(name) && attributeWrapper(name) !== '__truthy')).toEqual([]);
+    expect(properties.filter((name) => !values.includes(name) && attributeWrapper(name) !== '__brycomp_truthy')).toEqual([]);
 });
 
 test.for([[false], [true]])('the server writes them as Svelte does, on: %s', ([on]) => {

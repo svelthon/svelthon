@@ -156,7 +156,7 @@ describe("a template's expressions", () => {
     ])('map to the markup line they are written on, %s', ([line]) => {
         const { map, module } = compile('x0 = 0\n', 'P', 'src/P.svelte', {
             lineOffset: 1,
-            defs: ['def __expr_0():\n    return ("MARKED")'],
+            defs: ['def __brycomp_expr_0():\n    return ("MARKED")'],
             defLines: [line],
             defColumns: [4]
         });

@@ -45,7 +45,7 @@ hidden = 1
     // every one of them, rather than off a binding only some of them have, and
     // again on each write to it, which `live-exports.test.js` runs.
     test.for([['Widget'], ['LIMIT'], ['make'], ['brought']])('%s is read from the namespace', ([name]) => {
-        expect(plain(MODULE)).toContain(`__liveExport(__py, ${JSON.stringify(name)},`);
+        expect(plain(MODULE)).toContain(`__brycomp_liveExport(__brycomp_py, ${JSON.stringify(name)},`);
     });
 
     test('and none of them references a bare name that was never declared', () => {
@@ -61,13 +61,13 @@ hidden = 1
     // JavaScript reader, as `live-exports.test.js` runs.
     test('a function is exported live, as a value is', () => {
         expect(plain(MODULE)).toContain(
-            'export { __export_Widget as Widget, __export_LIMIT as LIMIT, __export_make as make, __export_brought as brought };'
+            'export { __brycomp_export_Widget as Widget, __brycomp_export_LIMIT as LIMIT, __brycomp_export_make as make, __brycomp_export_brought as brought };'
         );
     });
 
     test('and a name outside __all__ is not exported at all', () => {
         expect(plain(MODULE)).not.toContain('hidden as hidden');
-        expect(plain(MODULE)).not.toContain('__export_hidden');
+        expect(plain(MODULE)).not.toContain('__brycomp_export_hidden');
     });
 
     // Reading off the namespace would have turned a typo into `undefined`, which
@@ -134,7 +134,7 @@ describe('__all__ is read as the value the module ends with', () => {
                   .replace(/export \{ | \};?/g, '')
                   .trim()
                   .split(', ')
-                  .map((one) => one.replace(/^__export_\w+ as /, ''));
+                  .map((one) => one.replace(/^__brycomp_export_\w+ as /, ''));
     };
 
     test.for([
@@ -312,7 +312,7 @@ def unlisted():
         const script = store(MODULE);
 
         expect(script).toContain('get bump()');
-        expect(script).toContain('export { __export_bump as bump };');
+        expect(script).toContain('export { __brycomp_export_bump as bump };');
     });
 
     test('and the unlisted function is neither', () => {
@@ -335,7 +335,7 @@ def unlisted():
 
         expect(script).toContain('get count()');
         expect(script).toContain('get hidden()');
-        expect(script).toContain('export { __export_bump as bump };');
+        expect(script).toContain('export { __brycomp_export_bump as bump };');
     });
 
     // All of it is every name it binds, and the store gave a getter to those
@@ -369,7 +369,7 @@ describe('a directive is not data', () => {
 
             expect(script).not.toMatch(/let __(all|js)__ = \$state\.raw/);
             expect(script).not.toMatch(/__rev___(all|js)__/);
-            expect(script).not.toMatch(/bind\(__proto, '__(all|js)__'/);
+            expect(script).not.toMatch(/bind\(__brycomp_proto, '__(all|js)__'/);
         }
     );
 
@@ -383,7 +383,7 @@ describe('a directive is not data', () => {
 
     test('and on the plain path too', () => {
         expect(plain('__js__ = {"@sveltejs/kit": ["error"]}\n\nx = 1\n')).not.toContain(
-            "bind(__proto, '__js__'"
+            "bind(__brycomp_proto, '__js__'"
         );
     });
 });

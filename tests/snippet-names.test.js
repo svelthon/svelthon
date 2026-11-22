@@ -81,31 +81,31 @@ const rewrite = (markup) => {
 // The name reaches an expression only as an argument: nothing is looked up in
 // the component's Python namespace, where a snippet never exists.
 const takes = (defs, ...names) =>
-    defs.some((one) => one.startsWith(`def __expr_`) && one.includes(`(${names.join(', ')}):`));
+    defs.some((one) => one.startsWith(`def __brycomp_expr_`) && one.includes(`(${names.join(', ')}):`));
 
 // A prop handed to a component, read through a getter made beside the
 // derived it reads (`unmemoized`), which holds the call.
 const handed = (out, prop, name, call) =>
-    out.includes(`<Card ${prop}={${name}_read.value} />`) && out.includes(`{const ${name}_memo = $derived(__pybridge.reading(__expr_reread, '${name}', () => ${call}))}`);
+    out.includes(`<Card ${prop}={${name}_read.value} />`) && out.includes(`{const ${name}_memo = $derived(__brycomp_pybridge.reading(__brycomp_expr_reread, '${name}', () => ${call}))}`);
 
 describe('a snippet name in a template expression', () => {
     test('is passed to the expression that reads it', () => {
         const { out, defs } = rewrite('{#snippet row(x)}<b>{x}</b>{/snippet}<Card {row} />');
 
-        expect(handed(out, 'row', '__expr_1', '__expr_1(__follow(row))')).toBe(true);
+        expect(handed(out, 'row', '__brycomp_expr_1', '__brycomp_expr_1(__brycomp_follow(row))')).toBe(true);
         expect(takes(defs, 'row')).toBe(true);
     });
 
     test('even above its own declaration, which Svelte hoists', () => {
         const { defs } = rewrite('<Card {row} />{#snippet row(x)}<b>{x}</b>{/snippet}');
 
-        expect(defs[0].startsWith('def __expr_0(row):\n')).toBe(true);
+        expect(defs[0].startsWith('def __brycomp_expr_0(row):\n')).toBe(true);
     });
 
     test('under whichever prop name the child gives it', () => {
         const { out } = rewrite('{#snippet row(x)}<b>{x}</b>{/snippet}<Card header={row} />');
 
-        expect(handed(out, 'header', '__expr_1', '__expr_1(__follow(row))')).toBe(true);
+        expect(handed(out, 'header', '__brycomp_expr_1', '__brycomp_expr_1(__brycomp_follow(row))')).toBe(true);
     });
 
     // Only the names the expression reads: `{item}` reads neither the snippet's
@@ -136,7 +136,7 @@ describe('a snippet name in a template expression', () => {
     test('but not outside the block it was declared in', () => {
         const { defs } = rewrite('{#each xs as x}{#snippet row(n)}<b>{n}</b>{/snippet}{/each}{row}');
 
-        expect(defs.some((one) => one === 'def __expr_2():\n    return __text(row)')).toBe(true);
+        expect(defs.some((one) => one === 'def __brycomp_expr_2():\n    return __brycomp_text(row)')).toBe(true);
     });
 
     // Measured on Svelte itself: a snippet written in a `<div>` compiles to a
@@ -145,7 +145,7 @@ describe('a snippet name in a template expression', () => {
     test('nor outside the element it was declared in', () => {
         const { defs } = rewrite('<div>{#snippet row(n)}<b>{n}</b>{/snippet}</div>{row}');
 
-        expect(defs.some((one) => one === 'def __expr_1():\n    return __text(row)')).toBe(true);
+        expect(defs.some((one) => one === 'def __brycomp_expr_1():\n    return __brycomp_text(row)')).toBe(true);
     });
 
     test('and inside that element it is', () => {
@@ -160,7 +160,7 @@ describe('a snippet name in a template expression', () => {
     test('and one written into a child tag stays that child s own', () => {
         const { defs } = rewrite('<Card>{#snippet row(n)}<b>{n}</b>{/snippet}</Card>{row}');
 
-        expect(defs.some((one) => one === 'def __expr_1():\n    return __text(row)')).toBe(true);
+        expect(defs.some((one) => one === 'def __brycomp_expr_1():\n    return __brycomp_text(row)')).toBe(true);
     });
 
     // A void element opens no body, so it must not open a scope either: one
@@ -177,7 +177,7 @@ describe('a snippet name in a template expression', () => {
     test('and a {@render} still names it in JavaScript', () => {
         const { out } = rewrite('{#snippet row(n)}<b>{n}</b>{/snippet}{@render row(1)}');
 
-        expect(out).toContain('{@render row(({ get value() { return __expr_py_1(');
+        expect(out).toContain('{@render row(({ get value() { return __brycomp_expr_py_1(');
     });
 });
 

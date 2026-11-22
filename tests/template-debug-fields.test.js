@@ -1,5 +1,5 @@
 // A debug field, `f"{row.name=}"`, prints the text of its expression. In the
-// template the dot is rewritten, `__getattr(row, "name")`, and the label printed
+// template the dot is rewritten, `__brycomp_getattr(row, "name")`, and the label printed
 // the rewrite. Then the `=` was looked for at the end of the expression's node,
 // which leaves out the parentheses around it, and `{(row.name)=}` lost its `)`:
 // the component did not compile. Each line against what CPython prints for the

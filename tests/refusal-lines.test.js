@@ -19,7 +19,7 @@ const refused = (script) =>
     );
 
 test.for([
-    ['a name the compiler writes', '__expr_9 = 1', 'is a name the compiler writes itself', 4],
+    ['a name the compiler writes', '__brycomp_expr_9 = 1', 'is a name the compiler writes itself', 4],
     ['a marker on a name declared above', 'x = 1\n\n@export\ndef x():\n    return 1', 'would be read on a name the first declaration', 6],
     ['a marker called alone', 'def f():\n    pass\n\neffect(f)', 'written alone declares nothing', 7],
     ['a marker inside an expression', 'def f():\n    return 1\n\nprint(derived(f))', 'is read only as the whole value of an assignment', 7]

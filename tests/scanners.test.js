@@ -30,12 +30,12 @@ const rewrite = (markup) => pythonExpressions(markup, collector([]));
 // A text whose expression calls nothing, read from its derived while it reads
 // only Python's, and afresh once it reads JavaScript's own data, by a getter
 // made once beside it; the two declared at the markup's end.
-const FRESH = "__pybridge.reading(__expr_reread, '__expr_0', () => __expr_0())";
-const AFRESH = "__pybridge.reading(__expr_reread, '__expr_0', this.expression, this.held)";
+const FRESH = "__brycomp_pybridge.reading(__brycomp_expr_reread, '__brycomp_expr_0', () => __brycomp_expr_0())";
+const AFRESH = "__brycomp_pybridge.reading(__brycomp_expr_reread, '__brycomp_expr_0', this.expression, this.held)";
 const READ =
-    '<p>{(__expr_reread.__expr_0 ? __expr_0_read.value : __expr_0_memo)}</p>' +
-    `{const __expr_0_memo = $derived(${FRESH})}` +
-    `{const __expr_0_read = { expression: () => __expr_0(), held: () => __expr_0_memo, get value() { return ${AFRESH}; } }}`;
+    '<p>{(__brycomp_expr_reread.__brycomp_expr_0 ? __brycomp_expr_0_read.value : __brycomp_expr_0_memo)}</p>' +
+    `{const __brycomp_expr_0_memo = $derived(${FRESH})}` +
+    `{const __brycomp_expr_0_read = { expression: () => __brycomp_expr_0(), held: () => __brycomp_expr_0_memo, get value() { return ${AFRESH}; } }}`;
 
 // A brace that closes the expression, and one that only looks like it.
 describe('closingBrace reads through a string', () => {
@@ -43,14 +43,14 @@ describe('closingBrace reads through a string', () => {
     // expression, the compiled call stops mid-string and the rest of the line
     // leaks into the markup as text.
     test('a closing brace inside a string does not end the expression', () => {
-        expect(rewrite('<p>{f("a}b")}</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{f("a}b")}</p>')).toBe('<p>{__brycomp_expr_0()}</p>');
     });
 
     // The same, behind an escaped quote: `f("a\"}b")`. Without the escape
     // branch the `\"` reads as the end of the string and the `}` ends the
     // expression one character later.
     test('and neither does one behind an escaped quote', () => {
-        expect(rewrite('<p>{f("a\\"}b")}</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{f("a\\"}b")}</p>')).toBe('<p>{__brycomp_expr_0()}</p>');
     });
 
     test('a brace nested in a dict literal is counted, not skipped', () => {
@@ -63,13 +63,13 @@ describe('closingPair reads through a string', () => {
     // One argument, which calls nothing, so read inside a getter.
     test('a parenthesis inside a snippet argument stays inside it', () => {
         expect(rewrite('{@render row("a)b")}')).toBe(
-            '{@render __pybridge.snippet(__expr_py_0(), [])(({ get value() { return __expr_py_1(); } }).value)}'
+            '{@render __brycomp_pybridge.snippet(__brycomp_expr_py_0(), [])(({ get value() { return __brycomp_expr_py_1(); } }).value)}'
         );
     });
 
     test('and an escaped quote does not end that string early', () => {
         expect(rewrite('{@render row("a\\")b")}')).toBe(
-            '{@render __pybridge.snippet(__expr_py_0(), [])(({ get value() { return __expr_py_1(); } }).value)}'
+            '{@render __brycomp_pybridge.snippet(__brycomp_expr_py_0(), [])(({ get value() { return __brycomp_expr_py_1(); } }).value)}'
         );
     });
 });
@@ -79,12 +79,12 @@ describe('atTopLevel reads through a string', () => {
     // `{#await f(" then ")}` holds the word inside a literal. Split there, the
     // block awaits half a call and declares a name out of the other half.
     test('the word then inside a string is not the clause', () => {
-        expect(rewrite('{#await f(" then ")}x{/await}')).toBe('{#await __expr_py_0()}x{/await}');
+        expect(rewrite('{#await f(" then ")}x{/await}')).toBe('{#await __brycomp_expr_py_0()}x{/await}');
     });
 
     test('while the real clause still splits', () => {
         expect(rewrite('{#await f() then row}x{/await}')).toBe(
-            '{#await __expr_py_0() then row}x{/await}'
+            '{#await __brycomp_expr_py_0() then row}x{/await}'
         );
     });
 });
@@ -92,25 +92,25 @@ describe('atTopLevel reads through a string', () => {
 // What a walrus aims at: a name, an attribute, or a key.
 describe('walrusTarget reads through a string', () => {
     test('a key holding a bracket is one key, not two', () => {
-        expect(walrus('(d["a]b"] := 1)')).toBe('__setitem(d, "a]b", 1)');
+        expect(walrus('(d["a]b"] := 1)')).toBe('__brycomp_setitem(d, "a]b", 1)');
     });
 
     test('and a key holding an escaped quote is still one key', () => {
-        expect(walrus('(d["a\\"]b"] := 1)')).toBe('__setitem(d, "a\\"]b", 1)');
+        expect(walrus('(d["a\\"]b"] := 1)')).toBe('__brycomp_setitem(d, "a\\"]b", 1)');
     });
 
     // A slice is a target Python assigns to, and a key spelt as Python spells it
     // as an expression, `slice(start, stop)`; three colons, which no slice
     // holds, are left for Python to report.
     test('a slice is written as the key Python spells it', () => {
-        expect([walrus('(d[1:] := 1)'), walrus('(d[1:2:3:4] := 1)')]).toEqual(['__setitem(d, __slice(1, None), 1)', '(d[1:2:3:4] := 1)']);
+        expect([walrus('(d[1:] := 1)'), walrus('(d[1:2:3:4] := 1)')]).toEqual(['__brycomp_setitem(d, __brycomp_slice(1, None), 1)', '(d[1:2:3:4] := 1)']);
     });
 
     // A call is a step of the object, as a name is: `(make(1).x := 1)` was left
     // to Python, which refused an attribute where `(box.n := 1)` beside it
     // wrote one. A call as the target itself is still Python's to refuse.
     test('an object reached through a call is written into, and a call is no target', () => {
-        expect([walrus('(make(1).x := 1)'), walrus('(make(1) := 1)')]).toEqual(['__setattr(make(1), "x", 1)', '(make(1) := 1)']);
+        expect([walrus('(make(1).x := 1)'), walrus('(make(1) := 1)')]).toEqual(['__brycomp_setattr(make(1), "x", 1)', '(make(1) := 1)']);
     });
 });
 
@@ -121,23 +121,23 @@ describe('trailingKey reads through a string', () => {
     const each = (line) => rewrite(`{#each ${line}}x{/each}`);
 
     // What the block becomes: the rows a walk declared beside it hands over
-    // (`__collection`), and the key, when there is one, read with the row and
+    // (`__brycomp_collection`), and the key, when there is one, read with the row and
     // its index.
     const walked = (target, key) =>
         key === undefined
-            ? `{const __rows_1 = __collection(() => __expr_py_0())}{#each __rows_1() as ${target}}x{/each}`
-            : `{const __rows_1 = __collection(() => __expr_py_0(), (${target}, __index_1) => ${key})}` +
-              `{#each __rows_1() as ${target}, __index_1 (__rows_1.noted(__index_1, ${key}))}x{/each}`;
+            ? `{const __brycomp_rows_1 = __brycomp_collection(() => __brycomp_expr_py_0())}{#each __brycomp_rows_1() as ${target}}x{/each}`
+            : `{const __brycomp_rows_1 = __brycomp_collection(() => __brycomp_expr_py_0(), (${target}, __brycomp_index_1) => ${key})}` +
+              `{#each __brycomp_rows_1() as ${target}, __brycomp_index_1 (__brycomp_rows_1.noted(__brycomp_index_1, ${key}))}x{/each}`;
 
     // The key is compiled like any other expression, so what proves the scanner
     // found the *whole* group is that the target ends where it should: one
     // expression for the rows, one for the key, and nothing left over.
     test('a key holding a parenthesis inside a string is one key', () => {
-        expect(each('rows as row ("a)b")')).toBe(walked('row', '__expr_1()'));
+        expect(each('rows as row ("a)b")')).toBe(walked('row', '__brycomp_expr_1()'));
     });
 
     test('and one behind an escaped quote too', () => {
-        expect(each('rows as row ("a\\")b")')).toBe(walked('row', '__expr_1()'));
+        expect(each('rows as row ("a\\")b")')).toBe(walked('row', '__brycomp_expr_1()'));
     });
 
     // Python's strings, read as `atomic` reads them: a field that reuses its
@@ -148,14 +148,14 @@ describe('trailingKey reads through a string', () => {
         ['an f-string whose field reuses its quote', 'rows as row (f"{"("}{row.id}")'],
         ['a triple-quoted string holding a lone quote', 'rows as row ("""an "(" quote""" + str(row.id))']
     ])('%s is one key', ([, line]) => {
-        expect(each(line)).toBe(walked('row', '__expr_1(row)'));
+        expect(each(line)).toBe(walked('row', '__brycomp_expr_1(row)'));
     });
 
     // The three shapes that are *not* a key, each for its own reason.
     // Taken apart by position, as Python walks the row (`unpackPositional`).
     test('a tuple target is a target, not a key with nothing before it', () => {
         expect(each('pairs as (name, count)')).toBe(
-            walked('__unpacked_0').replace('}x{', '}{const __unpacked_1 = $derived(__pybridge.positional(__unpacked_0, 2))}x{')
+            walked('__brycomp_unpacked_0').replace('}x{', '}{const __brycomp_unpacked_1 = $derived(__brycomp_pybridge.positional(__brycomp_unpacked_0, 2))}x{')
         );
     });
 
@@ -225,6 +225,6 @@ describe('atomic reads an f-string as a grammar', () => {
     // A comment runs to the end of the line, and a line with no newline after
     // it ends at the end of the source.
     test('a comment with no newline after it ends where the source does', () => {
-        expect(walrus('(d["a"] := 1)  # note')).toBe('__setitem(d, "a", 1)  # note');
+        expect(walrus('(d["a"] := 1)  # note')).toBe('__brycomp_setitem(d, "a", 1)  # note');
     });
 });

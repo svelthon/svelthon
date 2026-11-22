@@ -20,7 +20,7 @@ test("a component's hooks are its module script's, not its instance's", async ()
     const module = code.match(/<script module>([\s\S]*?)<\/script>/)[1];
     const instance = code.match(/<script(?![^>]*module)[^>]*>([\s\S]*?)<\/script>/)[1];
 
-    expect([HOOKS.map((one) => module.includes(`__svelthon_hooks.${one}`)), HOOKS.map((one) => instance.includes(`__pybridge.${one}`))]).toEqual([
+    expect([HOOKS.map((one) => module.includes(`__brycomp_svelthon_hooks.${one}`)), HOOKS.map((one) => instance.includes(`__brycomp_pybridge.${one}`))]).toEqual([
         [true, true, true],
         [false, false, false]
     ]);
@@ -29,5 +29,5 @@ test("a component's hooks are its module script's, not its instance's", async ()
 test('and a store keeps them where its body is', () => {
     const { script } = compile('count = 0\n', 'Store', 'src/store.svelte.py', { store: true });
 
-    expect(HOOKS.map((one) => script.includes(`__pybridge.${one}`))).toEqual([true, true, true]);
+    expect(HOOKS.map((one) => script.includes(`__brycomp_pybridge.${one}`))).toEqual([true, true, true]);
 });

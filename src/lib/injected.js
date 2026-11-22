@@ -26,12 +26,12 @@
 // compiler's binding silently replaces theirs.
 // The one value a component computes for an injected name rather than reading
 // it lazily, held here so the emitted line and the accessor cannot drift apart.
-const PROPS_ID = '__props_id';
+const PROPS_ID = '__brycomp_props_id';
 
 const INJECTED = [
     // The decorators only mark; the compiler has read them off the AST already.
     // At a declaration, the JavaScript reads a marker of its own statement in
-    // place of `derived` and `effect` (`__pybridge.rune`); anywhere else they
+    // place of `derived` and `effect` (`__brycomp_pybridge.rune`); anywhere else they
     // are the identity.
     { name: 'derived', value: '() => (f) => f', locked: true },
     { name: 'bindable', value: '() => (v) => v', locked: true },
@@ -60,15 +60,15 @@ const INJECTED = [
     // without one would raise before the compiler's own wiring ever ran.
     {
         name: 'effect',
-        value: '() => __global.Object.assign((f) => f, { pre: (f) => f, root: (f) => f })',
+        value: '() => __brycomp_global.Object.assign((f) => f, { pre: (f) => f, root: (f) => f })',
         locked: true
     },
 
     // The two bridges, each way. `to_py` is what makes `.get()`, `.items()`
     // and `isinstance(x, dict)` work on something that only ever crossed from
     // JavaScript, `await res.json()` above all.
-    { name: 'to_js', value: '() => __plainData' },
-    { name: 'to_py', value: '() => __pyData' },
+    { name: 'to_js', value: '() => __brycomp_plainData' },
+    { name: 'to_py', value: '() => __brycomp_pyData' },
 
     // Jinja's `|tojson`, spelt as Python spells a function, the pair of
     // `from_json` below: a body, an embedded payload, a data attribute. Of the
@@ -79,15 +79,15 @@ const INJECTED = [
     // `json.dumps` cannot stand in for it: Brython leaves a class instance
     // untouched, so the dump walks the raw object. This is `to_js` with the
     // dump attached.
-    { name: 'to_json', value: '() => __helpers.to_json' },
+    { name: 'to_json', value: '() => __brycomp_helpers.to_json' },
 
     // The mirror of the line above, and built the same way: this is `to_py`
     // with the parse attached.
-    { name: 'from_json', value: '() => __helpers.from_json' },
+    { name: 'from_json', value: '() => __brycomp_helpers.from_json' },
 
     // The inbound bridge: the JavaScript globals, as they are, through the
     // runtime's name for them, which no name of the module's shadows.
-    { name: 'js', value: '() => __global' },
+    { name: 'js', value: '() => __brycomp_global' },
 
     // Django's `|date`, under Django's word, with the platform's behaviour
     // behind it, which is the rule the whole set follows: the keyword guides
@@ -101,7 +101,7 @@ const INJECTED = [
     // `locale` is the last argument, and matters most under server rendering:
     // without it the server formats in *its* language and the browser
     // reformats in the visitor's, which Svelte reports as a hydration mismatch.
-    { name: 'date', value: '() => __helpers.date' },
+    { name: 'date', value: '() => __brycomp_helpers.date' },
 
     // Django's `|timesince` and `|timeuntil` in one, which is why it carries
     // neither word: `Intl` formats a *signed* gap, so the direction is in the
@@ -118,7 +118,7 @@ const INJECTED = [
     // for is what the *display* needs: a second while it counts seconds, an
     // hour once it counts days. So it slows down on its own as a date ages,
     // which is why nothing has to switch it off.
-    { name: 'from_now', value: '() => __helpers.from_now' },
+    { name: 'from_now', value: '() => __brycomp_helpers.from_now' },
 
     // Django's `|slugify`: a title made into a URL segment or an anchor id.
     //
@@ -139,7 +139,7 @@ const INJECTED = [
     // a combining mark with no composed form, so dropping marks turns
     // `हिन्दी भाषा` into `ह-न-द-भ-ष-`. That is not folding a word, it is
     // shredding it.
-    { name: 'slugify', value: '() => __helpers.slugify' },
+    { name: 'slugify', value: '() => __brycomp_helpers.slugify' },
 
     // Django's `strip_tags`, the function behind its `|striptags` and Jinja's:
     // HTML shown as text, an excerpt from a feed, a preview of an imported
@@ -158,7 +158,7 @@ const INJECTED = [
     //
     // Whitespace is collapsed, as Jinja does. Neither inserts a separator
     // between blocks: `<p>a</p><p>b</p>` is `ab` there too.
-    { name: 'strip_tags', value: '() => __helpers.strip_tags' },
+    { name: 'strip_tags', value: '() => __brycomp_helpers.strip_tags' },
 
     // The word all three engines use, Liquid, Django and Jinja alike, for the one
     // thing a template genuinely does with a URL: build one. Decoding is an
@@ -176,7 +176,7 @@ const INJECTED = [
     // Jinja does not even agree with itself: `|urlencode("a/b")` yields `a/b`
     // while `|urlencode({"p": "a/b"})` yields `p=a%2Fb`, because the two forms
     // reach different helpers. Escaping in both is the only reading that holds.
-    { name: 'urlencode', value: '() => __helpers.urlencode' },
+    { name: 'urlencode', value: '() => __brycomp_helpers.urlencode' },
 
     // Context belongs to a component instance; a plain module has none. It is
     // per subtree, where a store is per application, and it is the only
@@ -185,23 +185,23 @@ const INJECTED = [
     // module body runs.
     //
     // Either end may be JavaScript's, so a value crosses as it does at every
-    // other door (`__pybridge.provide` and `provided`): set, a scalar
+    // other door (`__brycomp_pybridge.provide` and `provided`): set, a scalar
     // becomes JavaScript's own and a callable one JavaScript can call; read, a
     // number becomes Python's, an absence None, a JavaScript function one
     // Python can call, and what Python set, a callable or a scalar of its own
     // class, is itself again. A container
     // keeps its identity both ways. The key is a key as a dict has one, the
-    // way `{#key}` makes it (`__pybridge.key`): a number is JavaScript's own,
+    // way `{#key}` makes it (`__brycomp_pybridge.key`): a number is JavaScript's own,
     // so `0.5` finds what `setContext(0.5, …)` set, and `1`, `1.0` and `True`
     // are one key, while two NaN are two.
     {
         name: 'set_context',
-        value: '() => (key, value) => __pybridge.provide(__setContext, __getContext, __getAllContexts, __pybridge.key(key), value)',
+        value: '() => (key, value) => __brycomp_pybridge.provide(__brycomp_setContext, __brycomp_getContext, __brycomp_getAllContexts, __brycomp_pybridge.key(key), value)',
         component: true
     },
     {
         name: 'get_context',
-        value: '() => (key) => __pybridge.provided(__getContext, __pybridge.key(key))',
+        value: '() => (key) => __brycomp_pybridge.provided(__brycomp_getContext, __brycomp_pybridge.key(key))',
         component: true
     },
 

@@ -55,11 +55,11 @@ const BOOLEAN_ATTRIBUTE = new RegExp(`^(?:${[...BOOLEAN_ATTRIBUTES, ...BOOLEAN_P
 // third state besides: `until-found`, a string the element keeps.
 export const attributeWrapper = (name) =>
     name === 'class'
-        ? '__class'
+        ? '__brycomp_class'
         : /^hidden$/i.test(name)
-          ? '__hidden'
+          ? '__brycomp_hidden'
           : BOOLEAN_ATTRIBUTE.test(name)
-            ? '__truthy'
+            ? '__brycomp_truthy'
             : null;
 
 // The bindings Svelte reads for truth, `input.checked = Boolean(value)` and

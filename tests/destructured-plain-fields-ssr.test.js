@@ -2,7 +2,7 @@
 //
 // The server half of `destructured-plain-fields.test.js`: the server renders
 // the fields a pattern unpacks, read where they are read, the positional row
-// taken apart by `__pybridge.positional`.
+// taken apart by `__brycomp_pybridge.positional`.
 import { test, expect } from 'vitest';
 import { render } from 'svelte/server';
 import DestructuredPlainFields from './fixtures/DestructuredPlainFields.svelte';

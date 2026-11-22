@@ -6,7 +6,7 @@ import { test, expect } from 'vitest';
 import * as devalue from 'devalue';
 import { transport, codecLoaded, serverLoad, liveLoad, applicationTransport } from '../src/lib/transport.js';
 import { pickled, unpickled } from 'bryntime';
-import { __pybridge, pyBind, routeLoad, routeServerLoad, routeActions, routeData, remoteHelper } from '../src/lib/bridge.js';
+import { __brycomp_pybridge, pyBind, routeLoad, routeServerLoad, routeActions, routeData, remoteHelper } from '../src/lib/bridge.js';
 import {
     values,
     load,
@@ -76,14 +76,14 @@ test.for([
 });
 
 test('an iterator part-way crosses where it stands, in the dict that holds it', () => {
-    const crossed = viaJson({ data: __pybridge.bound(pyBind(values())) }).data;
+    const crossed = viaJson({ data: __brycomp_pybridge.bound(pyBind(values())) }).data;
 
     expect(String(describe($B.$getitem(pyBind(crossed), 'zipped')))).toBe("zip:[(2, 'b'), (3, 'c')]");
 });
 
 // What a `load()` or a prop hands JavaScript: the view, or the scalar itself.
 function viewOrSelf(value) {
-    return __pybridge.bound(value);
+    return __brycomp_pybridge.bound(value);
 }
 
 test('the data of a load() keeps its floats at the top, and its page reads a dict', async () => {
@@ -212,7 +212,7 @@ test.for([
 // JavaScript's that holds them, and a copy alone two levels down: the engine,
 // walking those, read each as the plain object.
 test('a group read before the codec is there is copies, each read by Python as its value', () => {
-    const view = __pybridge.bound(pyBind(values()));
+    const view = __brycomp_pybridge.bound(pyBind(values()));
     const made = devalue.stringify({ point: view.point, two }, { svelthon: encode });
     const listed = devalue.stringify({ items: [view.point, two] }, { svelthon: encode });
     const deep = devalue.stringify({ deep: { value: view.point } }, { svelthon: encode });
@@ -276,7 +276,7 @@ test('a server’s load() hands its page the value pickle carries, a universal o
 // What pickle refuses as SvelteKit writes the data, the transport throws with a
 // place in the data, as devalue's own errors have one: SvelteKit reads it.
 test('a refusal the transport throws has its place in the data, which SvelteKit reads', () => {
-    const view = __pybridge.bound(pyBind(remote_hook()));
+    const view = __brycomp_pybridge.bound(pyBind(remote_hook()));
     let caught;
 
     try {
@@ -747,7 +747,7 @@ test('an instance of a builtin’s subclass reads with no engine as on the serve
               : `${typeof one}:${one}`;
     const keys = ['ownprice', 'tags', 'blob', 'rows', 'money'];
     const dict = pyBind(values());
-    const made = devalue.stringify({ value: __pybridge.bound(dict) }, { svelthon: encode });
+    const made = devalue.stringify({ value: __brycomp_pybridge.bound(dict) }, { svelthon: encode });
     const codec = globalThis[CODEC];
     let copies;
 
@@ -762,7 +762,7 @@ test('an instance of a builtin’s subclass reads with no engine as on the serve
         codecLoaded();
     }
 
-    expect(copies).toEqual(keys.map((key) => shape(__pybridge.bound(dict)[key])));
+    expect(copies).toEqual(keys.map((key) => shape(__brycomp_pybridge.bound(dict)[key])));
 });
 
 // A page with no engine reads a dict's entries as its own properties, a
@@ -770,8 +770,8 @@ test('an instance of a builtin’s subclass reads with no engine as on the serve
 // instance with slots by its slots, as the view shows it.
 test('a copy with no engine holds what the server’s view shows: its own entries, their names, an instance’s slots', () => {
     const dict = pyBind(values());
-    const made = devalue.stringify({ value: __pybridge.bound(dict) }, { svelthon: encode });
-    const view = __pybridge.bound(dict);
+    const made = devalue.stringify({ value: __brycomp_pybridge.bound(dict) }, { svelthon: encode });
+    const view = __brycomp_pybridge.bound(dict);
     const codec = globalThis[CODEC];
     let box;
     let names;
@@ -809,8 +809,8 @@ test('a copy with no engine reads what the server’s page reads of the value pi
     const keys = ['reduced', 'stated', 'oops', 'cut', 'dots'];
     const shape = (one) => (one === undefined ? 'undefined' : JSON.stringify(one));
     const dict = pyBind(values());
-    const rebuilt = __pybridge.bound(unpickled(pickled(dict)));
-    const made = devalue.stringify({ value: __pybridge.bound(dict) }, { svelthon: encode });
+    const rebuilt = __brycomp_pybridge.bound(unpickled(pickled(dict)));
+    const made = devalue.stringify({ value: __brycomp_pybridge.bound(dict) }, { svelthon: encode });
     const codec = globalThis[CODEC];
     let copies;
     let single;
@@ -834,7 +834,7 @@ test('a copy with no engine reads what the server’s page reads of the value pi
 // And what the author's code makes of a value as it is rebuilt: a
 // `__setstate__` that adds an attribute, a `__setitem__` that names a key anew.
 test('a copy with no engine reads what the author’s code made of the value as it was rebuilt', () => {
-    const made = devalue.stringify({ value: __pybridge.bound(pyBind(hooked())) }, { svelthon: encode });
+    const made = devalue.stringify({ value: __brycomp_pybridge.bound(pyBind(hooked())) }, { svelthon: encode });
     const codec = globalThis[CODEC];
     let copies;
 
@@ -857,7 +857,7 @@ test('a copy with no engine reads what the author’s code made of the value as 
 test('a function, a class, a bound method or a callable instance is a function of its name with no engine', () => {
     const keys = ['function', 'klass', 'method', 'called', 'builtin'];
     const dict = pyBind(callables());
-    const view = __pybridge.bound(dict);
+    const view = __brycomp_pybridge.bound(dict);
     const made = devalue.stringify({ value: view }, { svelthon: encode });
     const codec = globalThis[CODEC];
     let copies;
@@ -888,7 +888,7 @@ test('JavaScript’s own values are devalue’s, and so is a promise, which Svel
 });
 
 test('an instance of a class only the server has is refused there, with the module named', () => {
-    __pybridge.serverModule('transport_vault');
+    __brycomp_pybridge.serverModule('transport_vault');
 
     expect(() => devalue.stringify({ value: viewOrSelf($B.$call(pyBind(Vault))) }, { svelthon: encode })).toThrow(
         /`transport_vault` is a module of the server alone/

@@ -122,7 +122,7 @@ describe('a rune written below the top level', () => {
         // Over several lines, which are read together and handed back whole.
         ['over several lines', 'importjs {inspect} from "./foreign.js"\ninspect(\n    41,\n)\n']
     ])('and one named inspect is called %s', ([, body]) => {
-        expect(script(body)().script).not.toMatch(/\$inspect|__inspect_/);
+        expect(script(body)().script).not.toMatch(/\$inspect|__brycomp_inspect_/);
     });
 
     // And one named `effect` or `derived`, called alone, which was refused as

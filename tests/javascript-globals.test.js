@@ -4,7 +4,7 @@
 // in the scope where the module's own names are bound: a component binding
 // `Object` or `Symbol` stopped loading, one binding `globalThis` made `js` its
 // value, one binding `Infinity` cut a handler's arguments to its number. It
-// reaches them through the runtime now (`__global`), and `1 / 0`. `undefined`,
+// reaches them through the runtime now (`__brycomp_global`), and `1 / 0`. `undefined`,
 // which it writes everywhere, is refused at its line, as a reserved word is.
 // Each value is what Python makes of the same module.
 import { test, expect } from 'vitest';

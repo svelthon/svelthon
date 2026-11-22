@@ -180,10 +180,10 @@ est refusé à sa ligne, avec le renommage que Python réserve à cette collisio
 `new_`. À l'intérieur d'un `def`, le même mot est une variable locale ordinaire
 et personne n'objecte.
 
-Une quatrième est celle du compilateur : un nom qui commence par `__` sans finir
-par `__` (`__cache`, et non `__all__`) est refusé partout où il est déclaré, dans
-le script comme dans le gabarit, parce que le code généré construit ses propres
-noms sur ce préfixe, dans la même portée.
+Une quatrième est celle du compilateur : un nom qui commence par `__brycomp_` est
+refusé partout où il est déclaré, dans le script comme dans le gabarit, parce que
+tous les noms que le code généré écrit à côté des vôtres commencent ainsi, dans
+la même portée. Tout autre nom est le vôtre, `__cache` compris.
 
 | Python | Svelte 5 |
 |---|---|
@@ -298,15 +298,15 @@ accent combinant donnent le même slug.
        $B.py2js()  ← Brython, sous Node          [build]
          │
          ├──→ module virtuel  virtual:svelthon/<nom>
-         │      export function init(__py) { …code généré… }
+         │      export function init(__brycomp_py) { …code généré… }
          │
          └──→ script du composant
                 let count = $state.raw(undefined);
-                bind(__proto, 'count', () => count, (v) => { count = v; });
-                const __py = Object.create(__proto);
-                __py.$proxy = true;
-                init(__py);
-                const increment = (...a) => __fn_increment(...a.slice(0, 0));
+                bind(__brycomp_proto, 'count', () => count, (v) => { count = v; });
+                const __brycomp_py = Object.create(__brycomp_proto);
+                __brycomp_py.$proxy = true;
+                init(__brycomp_py);
+                const increment = (...a) => __brycomp_fn_increment(...a.slice(0, 0));
 ```
 
 Le code généré vit dans un module séparé parce que **Svelte interdit le préfixe
@@ -454,7 +454,7 @@ Toute expression que le gabarit *lit* est compilée en Python. Chaque site devie
 une fonction cachée ajoutée au module, que le balisage appelle :
 
 ```svelte
-{#if rows}                    <!-- {#if __expr_0()}     def __expr_0(): … -->
+{#if rows}                    <!-- {#if __brycomp_expr_0()}     def __brycomp_expr_0(): … -->
   {#each rows as r}
     <li data-id={r.id}>{r.label}</li>
   {/each}

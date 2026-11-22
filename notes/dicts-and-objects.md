@@ -195,9 +195,9 @@ anyway, out of regard for whoever writes the template. That is our situation.
 
 **It is not a new kind of divergence.** A template expression already differs
 from the same text in the script, and by more than this: `{#if items}` compiles
-through `__truthy`, so an empty list is false the Python way rather than the
-JavaScript way; `{items}` through `__text`, so it renders `['a', 'b']` and not
-`a,b`; an iterable through `__seq`, a spread through `__spread`, a `{#key}`
+through `__brycomp_truthy`, so an empty list is false the Python way rather than the
+JavaScript way; `{items}` through `__brycomp_text`, so it renders `['a', 'b']` and not
+`a,b`; an iterable through `__brycomp_seq`, a spread through `__brycomp_spread`, a `{#key}`
 through `repr()`. Four implicit wrappers were already there, deliberately. The
 dot is the fifth, and the smallest of them.
 
@@ -213,7 +213,7 @@ order, and it is what keeps the subscript worth having.
 for the length of one expression, so a helper the markup calls gets it too, and
 the same helper called from `on_mount` does not. That is the seam, and it is the
 price of the feature — a function that works from the markup and raises from a
-lifecycle hook. It is the same shape as `__truthy`: `{#if items}` and `if items:`
+lifecycle hook. It is the same shape as `__brycomp_truthy`: `{#if items}` and `if items:`
 have never meant quite the same thing either.
 
 **It costs nothing when it is not used.** Brython's generated code reads

@@ -125,7 +125,7 @@ describe('bind:group on an element', () => {
             expect(() => rewrite(markup)).toThrow(/`bind:group` cannot bind to `row`, a snippet parameter/);
             expect(native).toThrow(/Cannot `bind:group` to a snippet parameter/);
         } else {
-            expect(rewrite(markup)).toContain('use:__group');
+            expect(rewrite(markup)).toContain('use:__brycomp_group');
             expect(native).not.toThrow();
         }
     });
@@ -136,7 +136,7 @@ describe('bind:group on an element', () => {
         ['<input type=checkbox value="a" bind:group={picked} />'],
         ['<input {**attrs} value="a" bind:group={picked} />']
     ])('%s keeps the binding', ([markup]) => {
-        expect(rewrite(markup)).toContain('use:__group');
+        expect(rewrite(markup)).toContain('use:__brycomp_group');
     });
 
     // A directive whose name only begins with `group` is no group: a word
@@ -147,7 +147,7 @@ describe('bind:group on an element', () => {
         ['<input type="checkbox" value="mail" bind:groupé={picked} />'],
         ['<input type="checkbox" value="mail" bind:groupé />']
     ])('%s is no group, as Svelte has it', ([markup]) => {
-        expect(rewrite(markup)).not.toContain('use:__group');
+        expect(rewrite(markup)).not.toContain('use:__brycomp_group');
     });
 });
 
@@ -160,6 +160,6 @@ describe('a prop whose name begins with group', () => {
     test.for([['<Child bind:group-size={model["v"]} />'], ['<Child bind:groupé={model["v"]} />']])('%s binds the prop', ([markup]) => {
         const written = rewrite(markup);
 
-        expect([written.includes('use:__group'), /bind:group(?:-size|é)=\{/u.test(written)]).toEqual([false, true]);
+        expect([written.includes('use:__brycomp_group'), /bind:group(?:-size|é)=\{/u.test(written)]).toEqual([false, true]);
     });
 });

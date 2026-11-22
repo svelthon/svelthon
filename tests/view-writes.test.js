@@ -4,12 +4,12 @@
 // same write does to an array.
 import { test, expect, describe } from 'vitest';
 import '../src/lib/compile.js';
-import { __pybridge, pyData } from '../src/lib/bridge.js';
+import { __brycomp_pybridge, pyData } from '../src/lib/bridge.js';
 
 const view = (items) => {
     const source = pyData(items);
 
-    return { source, view: __pybridge.bound(source) };
+    return { source, view: __brycomp_pybridge.bound(source) };
 };
 
 // The view's setter of `length` popped and appended without asking first:
@@ -192,7 +192,7 @@ describe('a subclass whose pop or append moves nothing', () => {
         ['append', 'the index 3', [1], (rows) => (rows[3] = 9)]
     ])('with %s stuck, %s is written as on an array', ([stuck, , items, write]) => {
         const native = [...items];
-        const list = __pybridge.bound($B.$call(module[stuck === 'pop' ? 'StuckPop' : 'StuckAppend'], pyData(items)));
+        const list = __brycomp_pybridge.bound($B.$call(module[stuck === 'pop' ? 'StuckPop' : 'StuckAppend'], pyData(items)));
 
         write(native);
         write(list);

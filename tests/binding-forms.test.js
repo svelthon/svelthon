@@ -56,7 +56,7 @@ const FORMS = [
 ];
 
 // The line the compiler emits when it believes nobody has taken the name.
-const injected = (src) => script(src).includes("bind(__proto, 'date', () => __helpers.date,");
+const injected = (src) => script(src).includes("bind(__brycomp_proto, 'date', () => __brycomp_helpers.date,");
 
 describe('a name the author bound is the author’s, however it was written', () => {
     test.for(FORMS)('%s keeps the name', ([, form]) => {
@@ -123,9 +123,9 @@ describe('and the ones that bind a value become a signal', () => {
     test('and hands the runtime the list its names unsubscribe with', () => {
         const emitted = script('from browser import *\n');
 
-        expect(emitted).toContain("Object.defineProperty(__proto, '$bryntimeStarred', { value: { owner: __subs } });");
-        expect(emitted).toContain('const __subs = [];');
-        expect(emitted).toContain('__unsubscribe(__subs)');
+        expect(emitted).toContain("Object.defineProperty(__brycomp_proto, '$bryntimeStarred', { value: { owner: __brycomp_subs } });");
+        expect(emitted).toContain('const __brycomp_subs = [];');
+        expect(emitted).toContain('__brycomp_unsubscribe(__brycomp_subs)');
     });
 
     test.for([
@@ -152,7 +152,7 @@ describe('and the ones that bind a value become a signal', () => {
 describe('a JavaScript name does not take a Python one either', () => {
     const publishes = (src, jsNames) =>
         compile(src, 'P', 'src/P.svelte', { jsNames }).script.includes(
-            `bind(__proto, 'fades', () => __jsCall(__svelthon_module["fades"]))`
+            `bind(__brycomp_proto, 'fades', () => __brycomp_jsCall(__brycomp_svelthon_module["fades"]))`
         );
 
     test('published when Python has no name of that spelling', () => {

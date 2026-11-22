@@ -88,7 +88,7 @@ describe('the preprocessor decides by the script tag', () => {
             filename: 'B.svelte'
         });
 
-        expect(out.code).toContain('__expr_0_memo');
+        expect(out.code).toContain('__brycomp_expr_0_memo');
         expect(out.code).toMatch(/<script [^>]*\blang="python">/);
     });
 
@@ -113,7 +113,7 @@ describe('the preprocessor decides by the script tag', () => {
     // The language is decided twice about one file: here, from the text, and
     // again by the `script` hook from the attributes Svelte parsed. A row where
     // the two disagree is a broken component whichever way round it falls — a
-    // template compiled for Python around a JavaScript body gives `__expr_0 is
+    // template compiled for Python around a JavaScript body gives `__brycomp_expr_0 is
     // not defined`, and a Python body under a JavaScript template gives `count
     // is not defined`, about a name the author wrote.
     //
@@ -205,7 +205,7 @@ describe('the preprocessor decides by the script tag', () => {
             filename: 'C2.svelte'
         });
 
-        expect(out.code).toContain('__expr_0_memo');
+        expect(out.code).toContain('__brycomp_expr_0_memo');
         expect(out.code.split('\n')[0]).toBe('<!-- doc');
     });
 
@@ -226,7 +226,7 @@ describe('the preprocessor decides by the script tag', () => {
         const script = code.match(/<script>([\s\S]*?)<\/script>/)[1];
 
         expect(script).toContain('$state');
-        expect(script).toContain('__expr_0');
+        expect(script).toContain('__brycomp_expr_0');
     });
 
     // The content is JavaScript now, so the tag must stop claiming otherwise.
@@ -601,10 +601,10 @@ describe('the plugin loads a .py itself', () => {
         };
 
         try {
-            expect(route('loads', 'def load(event):\n    return {"n": 1}\n')).toContain('__export_load = __routeServerLoad(__value');
-            expect(route('universal', 'def load(event):\n    return {"n": 1}\n', '+page.py')).toContain('__export_load = __routeLoad(__value');
+            expect(route('loads', 'def load(event):\n    return {"n": 1}\n')).toContain('__brycomp_export_load = __brycomp_routeServerLoad(__brycomp_value');
+            expect(route('universal', 'def load(event):\n    return {"n": 1}\n', '+page.py')).toContain('__brycomp_export_load = __brycomp_routeLoad(__brycomp_value');
             expect(route('acts', 'def submit(event):\n    return None\n\nactions = {"default": submit}\n__all__ = ["actions"]\n')).not.toContain(
-                '__export_load'
+                '__brycomp_export_load'
             );
         } finally {
             rmSync(dir, { recursive: true, force: true });
@@ -675,20 +675,20 @@ describe("a JavaScript server module's load crosses through the transport's rela
     const plugin = svelthon();
     const wrapped = (code, file = '/app/src/routes/x/+page.server.js') => plugin.transform(code, file);
     const relayed = (code) =>
-        /const __svelthon_load = (?:'load' in __svelthon_stars \? )?__svelthon_liveLoad\(\(\) => (.+?)\)(?: : undefined)?;\nexport \{ __svelthon_load as load \};$/.exec(code)?.[1];
+        /const __brycomp_svelthon_load = (?:'load' in __brycomp_svelthon_stars \? )?__brycomp_svelthon_liveLoad\(\(\) => (.+?)\)(?: : undefined)?;\nexport \{ __brycomp_svelthon_load as load \};$/.exec(code)?.[1];
 
     test.for([
         ['a function', 'export function load(event) {\n    return {};\n}', 'load', 'function load(event)'],
         ['an async function', 'export async function load() {}', 'load', 'async function load()'],
         ['a typed constant', 'export const load: PageServerLoad = async () => ({});', 'load', 'const load: PageServerLoad'],
         ['a list', 'const own = () => ({});\nexport { own as load, other };', 'own', 'export { other };'],
-        ['a re-export', "export { load } from './shared.js';", '__svelthon_route_load', "import { load as __svelthon_route_load } from './shared.js';"],
+        ['a re-export', "export { load } from './shared.js';", '__brycomp_svelthon_route_load', "import { load as __brycomp_svelthon_route_load } from './shared.js';"],
         ['a pattern', 'export const { load, other } = make();', 'load', 'export { other };'],
-        ['a module it re-exports all of', "export * from './shared.js';", '__svelthon_stars.load', 'import * as __svelthon_stars from "/app/src/routes/x/+page.server.js?svelthon-stars";'],
-        ['two modules it re-exports all of', "export * from './one.js';\nexport * from './two.js';", '__svelthon_stars.load', 'import * as __svelthon_stars from "/app/src/routes/x/+page.server.js?svelthon-stars";'],
+        ['a module it re-exports all of', "export * from './shared.js';", '__brycomp_svelthon_stars.load', 'import * as __brycomp_svelthon_stars from "/app/src/routes/x/+page.server.js?svelthon-stars";'],
+        ['two modules it re-exports all of', "export * from './one.js';\nexport * from './two.js';", '__brycomp_svelthon_stars.load', 'import * as __brycomp_svelthon_stars from "/app/src/routes/x/+page.server.js?svelthon-stars";'],
         // and no relay where they export none, which SvelteKit would take for
         // a `load` it asks the server for data by at each navigation
-        ['modules it re-exports all of, if one exports load', "export * from './options.js';", '__svelthon_stars.load', "= 'load' in __svelthon_stars ? __svelthon_liveLoad"]
+        ['modules it re-exports all of, if one exports load', "export * from './options.js';", '__brycomp_svelthon_stars.load', "= 'load' in __brycomp_svelthon_stars ? __brycomp_svelthon_liveLoad"]
     ])('as %s', ([, code, local, kept]) => {
         const out = wrapped(code, local === 'load' && kept.includes(':') ? '/app/src/routes/x/+layout.server.ts' : undefined);
 
@@ -727,7 +727,7 @@ describe("a JavaScript server module's load crosses through the transport's rela
         ].join('\n');
         const out = wrapped(code);
 
-        expect(out.match(/export \{ __svelthon_load as load \}/g)).toHaveLength(1);
+        expect(out.match(/export \{ __brycomp_svelthon_load as load \}/g)).toHaveLength(1);
         expect(out).toContain("export function load() { return { version: 'old' }; }");
         expect(out).toContain('`export function load() {}`');
         expect(out).toContain("\nfunction load() { return { version: 'new' }; }");
@@ -1275,7 +1275,7 @@ describe('a store takes the other branch of the compiler', () => {
         const code = plugin.load.call({ addWatchFile() {} }, `${file}?python`);
 
         expect(code).toContain('$state');
-        expect(code).toContain('export { __store as store };');
+        expect(code).toContain('export { __brycomp_store as store };');
     });
 
     test('and a default export, which a route module does not have', () => {

@@ -175,10 +175,10 @@ cannot be given a binding in the generated module, so it is refused at its line
 with the rename Python has for the collision: `new_`. Inside a `def` the same
 word is an ordinary local and nothing objects.
 
-A fourth is the compiler's own: a name that starts with `__` and does not end
-with one (`__cache`, not `__all__`) is refused wherever it is declared, in the
-script and in the markup alike, because the generated code builds its names out
-of that prefix in the same scope.
+A fourth is the compiler's own: a name that starts with `__brycomp_` is refused
+wherever it is declared, in the script and in the markup alike, because every
+name the generated code writes beside yours starts with it, in the same scope.
+Any other name is yours, `__cache` included.
 
 | Python | Svelte 5 |
 |---|---|
@@ -292,15 +292,15 @@ combining accent give the same slug, and `homo¹` gives `homo1`.
        $B.py2js()  ← Brython, under Node          [build time]
          │
          ├──→ virtual module  virtual:svelthon/<name>
-         │      export function init(__py) { …generated code… }
+         │      export function init(__brycomp_py) { …generated code… }
          │
          └──→ component script
                 let count = $state.raw(undefined);
-                bind(__proto, 'count', () => count, (v) => { count = v; });
-                const __py = Object.create(__proto);
-                __py.$proxy = true;
-                init(__py);
-                const increment = (...a) => __fn_increment(...a.slice(0, 0));
+                bind(__brycomp_proto, 'count', () => count, (v) => { count = v; });
+                const __brycomp_py = Object.create(__brycomp_proto);
+                __brycomp_py.$proxy = true;
+                init(__brycomp_py);
+                const increment = (...a) => __brycomp_fn_increment(...a.slice(0, 0));
 ```
 
 The generated code lives in a separate module because **Svelte forbids the `$`
@@ -442,7 +442,7 @@ Every expression a template *reads* is compiled as Python. Each site becomes a
 hidden function appended to the module, and the markup calls it:
 
 ```svelte
-{#if rows}                    <!-- {#if __expr_0()}     def __expr_0(): … -->
+{#if rows}                    <!-- {#if __brycomp_expr_0()}     def __brycomp_expr_0(): … -->
   {#each rows as r}
     <li data-id={r.id}>{r.label}</li>
   {/each}

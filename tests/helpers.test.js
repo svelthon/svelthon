@@ -17,7 +17,7 @@
 import { test, expect, describe } from 'vitest';
 
 import { runInNewContext } from 'node:vm';
-import { NONE, __pybridge, pyData } from '../src/lib/bridge.js';
+import { NONE, __brycomp_pybridge, pyData } from '../src/lib/bridge.js';
 import {
     date,
     from_json,
@@ -59,7 +59,7 @@ describe('the set itself', () => {
 
 describe('to_json', () => {
     test('a Python container goes out as plain JSON', () => {
-        expect(to_json(__pybridge.list([1, 2]))).toBe('[1,2]');
+        expect(to_json(__brycomp_pybridge.list([1, 2]))).toBe('[1,2]');
     });
 
     // Jinja's `|tojson` writes `<`, `>`, `&` and `'` as escapes, so its text holds
@@ -73,8 +73,8 @@ describe('to_json', () => {
     });
 
     test('a numeric indent is honoured', () => {
-        expect(to_json(__pybridge.list([1])).length).toBeLessThan(to_json(__pybridge.list([1]), 2).length);
-        expect(to_json(__pybridge.list([1]), 2)).toBe('[\n  1\n]');
+        expect(to_json(__brycomp_pybridge.list([1])).length).toBeLessThan(to_json(__brycomp_pybridge.list([1]), 2).length);
+        expect(to_json(__brycomp_pybridge.list([1]), 2)).toBe('[\n  1\n]');
     });
 
     // A dict's keys as a JavaScript object lists them, its integer keys first,
@@ -103,8 +103,8 @@ describe('to_json', () => {
     // of them has been the shape of three defects in this file.
     test.for([
         ['bare', (one) => one],
-        ['in a list', (one) => __pybridge.list([one])],
-        ['under a key', (one) => __pybridge.list([__pybridge.list([one])])]
+        ['in a list', (one) => __brycomp_pybridge.list([one])],
+        ['under a key', (one) => __brycomp_pybridge.list([__brycomp_pybridge.list([one])])]
     ])('a non-finite number %s is refused, not written as null', ([, wrap]) => {
         for (const one of [NaN, Infinity, -Infinity]) {
             expect(() => to_json(wrap(one))).toThrow(/has no JSON/);
@@ -117,7 +117,7 @@ describe('to_json', () => {
     // Python's None is an object, and `JSON.stringify(v, null, None)` would
     // quietly indent with it: None writes one line.
     test('None as the indent means no indent, not indent-with-None', () => {
-        expect(to_json(__pybridge.list([1]), NONE)).toBe('[1]');
+        expect(to_json(__brycomp_pybridge.list([1]), NONE)).toBe('[1]');
     });
 
     // Every other indent as `json.dumps` takes it, and so Jinja's `|tojson`: a
@@ -143,7 +143,7 @@ describe('to_json', () => {
         const big = 2n ** 70n;
 
         expect(to_json(big)).toBe('1180591620717411303424');
-        expect(to_json(__pybridge.list([big]))).toBe('[1180591620717411303424]');
+        expect(to_json(__brycomp_pybridge.list([big]))).toBe('[1180591620717411303424]');
     });
 
     // A class has no JSON, and it reaches here whole since `plainData` stopped
@@ -783,7 +783,7 @@ describe('from_json', () => {
     test('parses into something Python can read', () => {
         const parsed = from_json('{"a": [1, 2]}');
 
-        expect(__pybridge.str(parsed)).toBe("{'a': [1, 2]}");
+        expect(__brycomp_pybridge.str(parsed)).toBe("{'a': [1, 2]}");
     });
 
     test('bad JSON raises rather than returning nothing', () => {
@@ -795,8 +795,8 @@ describe('from_json', () => {
     // printing `<Javascript null>`.
     test('null is None, at the top and inside', () => {
         expect(from_json('null')).toBe(NONE);
-        expect(__pybridge.str(from_json('{"a": null}'))).toBe("{'a': None}");
-        expect(__pybridge.str(from_json('[null, [null]]'))).toBe('[None, [None]]');
+        expect(__brycomp_pybridge.str(from_json('{"a": null}'))).toBe("{'a': None}");
+        expect(__brycomp_pybridge.str(from_json('[null, [null]]'))).toBe('[None, [None]]');
     });
 
     // An integer past 2^53 is not a double, and a reviver is too late to say so:
@@ -806,13 +806,13 @@ describe('from_json', () => {
     test('an integer past 2^53 keeps its digits', () => {
         const digits = '12345678901234567890123';
 
-        expect(__pybridge.str(from_json(`{"a": ${digits}}`))).toBe(`{'a': ${digits}}`);
+        expect(__brycomp_pybridge.str(from_json(`{"a": ${digits}}`))).toBe(`{'a': ${digits}}`);
         expect(from_json('9007199254740993')).toBe(9007199254740993n);
 
         // And nothing smaller changes shape: still a JavaScript number, and a
         // fraction is still a float rather than an int.
         expect(from_json('1')).toBe(1);
-        expect(__pybridge.str(from_json('0.5'))).toBe('0.5');
+        expect(__brycomp_pybridge.str(from_json('0.5'))).toBe('0.5');
     });
 });
 
@@ -1160,13 +1160,13 @@ describe('urlencode', () => {
     // Jinja's other shape, and CPython's: a sequence of pairs, the only way to
     // write one key twice. Read as a value, the list encoded its own repr.
     test('and so does a sequence of pairs, a key repeated included', () => {
-        const pairs = __pybridge.list([
+        const pairs = __brycomp_pybridge.list([
             globalThis.__BRYTHON__.fast_tuple(['tag', 'x']),
             globalThis.__BRYTHON__.fast_tuple(['tag', 'y'])
         ]);
 
         expect(urlencode(pairs)).toBe('tag=x&tag=y');
-        expect(urlencode(__pybridge.list([]))).toBe('');
+        expect(urlencode(__brycomp_pybridge.list([]))).toBe('');
     });
 
     // The pairs are what Python's loop yields, of the sequence and of each
@@ -1260,7 +1260,7 @@ describe('urlencode', () => {
     });
 
     test('while a list of anything but pairs is still a value', () => {
-        expect(urlencode(__pybridge.list(['a', 'b']))).toBe(encodeURIComponent("['a', 'b']"));
+        expect(urlencode(__brycomp_pybridge.list(['a', 'b']))).toBe(encodeURIComponent("['a', 'b']"));
     });
 
     test('a mapping becomes a query string', () => {

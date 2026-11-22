@@ -48,10 +48,10 @@ describe('a compiler refusal names a position', () => {
         // module, held to the rules every binding there is: these used to reach
         // the JavaScript parser downstream, which named no line of the author's.
         ['a __js__ name JavaScript reserves', 'x = 1\n__js__ = {"./m.js": ["new"]}\n', { plain: true }, 2],
-        ['a __js__ name in the compiler prefix', '__js__ = {"./m.js": ["__py"]}\n', { plain: true }, 1],
+        ['a __js__ name in the compiler prefix', '__js__ = {"./m.js": ["__brycomp_py"]}\n', { plain: true }, 1],
         ['an importjs default JavaScript reserves', 'x = 1\nimportjs default from "m"\n', {}, 2],
         ['an importjs renamed to a reserved word', 'importjs {a as new} from "m"\n', {}, 1],
-        ['an importjs namespace in the compiler prefix', 'importjs * as __py from "m"\n', {}, 1],
+        ['an importjs namespace in the compiler prefix', 'importjs * as __brycomp_py from "m"\n', {}, 1],
         ['an importjs naming `default` without renaming it', 'importjs {default} from "m"\n', {}, 1]
     ])('%s', ([, source, options, line]) => {
         const error = thrown(source, options);

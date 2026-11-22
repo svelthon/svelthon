@@ -15,9 +15,9 @@ component's own module, and the markup calls it:
 ```
 
 ```python
-def __expr_0(): return __truthy(rows)
-def __expr_1(r): return r.id
-def __expr_2(r): return __text(r.label)
+def __brycomp_expr_0(): return __brycomp_truthy(rows)
+def __brycomp_expr_1(r): return r.id
+def __brycomp_expr_2(r): return __brycomp_text(r.label)
 ```
 
 Appended, never prepended, so the author's line numbers stay true — which is what
@@ -36,18 +36,18 @@ template *less* faithful, not more.
 
 | | Where | Without it |
 |---|---|---|
-| `__truthy` | `{#if}`, `{:else if}`, `class:`, and on an element the boolean attributes of HTML (`hidden`, `disabled`, `checked`…) | `{#if []}` is true, as it is in JavaScript, and `hidden={[]}` hides |
-| `__class` | `class={…}` on an element | Svelte hands an object or an array to `clsx`, which keeps what JavaScript finds true and walks into `None`, writing `ob_type __doc__` as classes |
-| `__spreadElement` | `{**attrs}` on an element | each key is read as the attribute it becomes: `class` by `__class`, a boolean attribute by `__truthy` |
+| `__brycomp_truthy` | `{#if}`, `{:else if}`, `class:`, and on an element the boolean attributes of HTML (`hidden`, `disabled`, `checked`…) | `{#if []}` is true, as it is in JavaScript, and `hidden={[]}` hides |
+| `__brycomp_class` | `class={…}` on an element | Svelte hands an object or an array to `clsx`, which keeps what JavaScript finds true and walks into `None`, writing `ob_type __doc__` as classes |
+| `__brycomp_spreadElement` | `{**attrs}` on an element | each key is read as the attribute it becomes: `class` by `__brycomp_class`, a boolean attribute by `__brycomp_truthy` |
 
 Which wrapper an attribute takes is decided by its name, in one place
 (`src/lib/attributes.js`), and every way of writing it asks there: `name={x}`,
 the shorthand `{name}`, a lone interpolation between quotes, on a tag or on
 `<svelte:element>`, and through a spread.
-| `__text` | `{x}`, `{@html}`, `class="a {x}"` | `None` renders `[object Object]`, a list `1,2` instead of `[1, 2]` |
-| `__seq` | the `{#each}` iterable | a dict, a `range`, a generator or `.items()` does not iterate at all — a list and a tuple do, being JavaScript arrays |
-| `__spread` | `{...attrs}` | Svelte diffs against the previous render by identity, so a mutated dict looks unchanged |
-| `__key` | `{#key x}` and an `{#each}` key | keys compare by identity: a list, a dict or an instance keeps one, a tuple or a float rebuilt does not, so those key by value, as Python compares them: a tuple by its members, an instance inside it by identity |
+| `__brycomp_text` | `{x}`, `{@html}`, `class="a {x}"` | `None` renders `[object Object]`, a list `1,2` instead of `[1, 2]` |
+| `__brycomp_seq` | the `{#each}` iterable | a dict, a `range`, a generator or `.items()` does not iterate at all — a list and a tuple do, being JavaScript arrays |
+| `__brycomp_spread` | `{...attrs}` | Svelte diffs against the previous render by identity, so a mutated dict looks unchanged |
+| `__brycomp_key` | `{#key x}` and an `{#each}` key | keys compare by identity: a list, a dict or an instance keeps one, a tuple or a float rebuilt does not, so those key by value, as Python compares them: a tuple by its members, an instance inside it by identity |
 
 They are not Python's own `bool()` and `str()`: a template may hold a foreign
 JavaScript value — a DOM node from `bind:this` — on which Brython's classifier
@@ -71,7 +71,7 @@ which is the whole cost of the feature. The write is redirected only where the
 read already succeeded — an existing key; what a *missing* key should do is
 undecided and keeps Python's answer.
 
-`__assign` is what a parenthesised walrus becomes, in a handler only. The
+`__brycomp_assign` is what a parenthesised walrus becomes, in a handler only. The
 rewrite is pure string work in `markup.js`, not an AST pass, because `py2js`
 hands back a **copy** of the AST: mutating it changes nothing in the generated
 code. The write goes through the namespace, so through the accessor, so the
@@ -81,7 +81,7 @@ signal fires.
 
 `notes/directives.md` has the four mechanisms and the two things left over.
 Briefly: a handler's value is wrapped by `pyEvent` so JavaScript can call a
-Python callable with the arity it declared; `class:` goes through `__truthy`;
+Python callable with the arity it declared; `class:` goes through `__brycomp_truthy`;
 `use:` and the transition family name their function in the directive, so their
 value is an ordinary options dict; `bind:` is compiled twice, as an expression
 and as an assignment target, into the pair Svelte takes.

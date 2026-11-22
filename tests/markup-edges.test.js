@@ -14,12 +14,12 @@ const rewrite = (markup) => {
 
 describe('an {#each} the walker still has to place', () => {
     // No `as`: nothing is declared, and there is no key either. The iterable is
-    // still Python, and still goes through `__seq`.
+    // still Python, and still goes through `__brycomp_seq`.
     test('without a name', () => {
         const { out, defs } = rewrite('{#each items}<li>x</li>{/each}');
 
-        expect(out).toContain('{const __rows_1 = __collection(() => __expr_py_0())}{#each __rows_1()}');
-        expect(defs[0]).toContain('__seq(items)');
+        expect(out).toContain('{const __brycomp_rows_1 = __brycomp_collection(() => __brycomp_expr_py_0())}{#each __brycomp_rows_1()}');
+        expect(defs[0]).toContain('__brycomp_seq(items)');
     });
 
     // `as (k, v)` destructures a tuple, which is what `.items()` hands over: the
@@ -27,7 +27,7 @@ describe('an {#each} the walker still has to place', () => {
     test('destructuring a tuple', () => {
         const { out } = rewrite('{#each d.items() as (k, v)}<li>{k}</li>{/each}');
 
-        expect(out).toContain('as __unpacked_0}{const __unpacked_1 = $derived(__pybridge.positional(__unpacked_0, 2))}');
+        expect(out).toContain('as __brycomp_unpacked_0}{const __brycomp_unpacked_1 = $derived(__brycomp_pybridge.positional(__brycomp_unpacked_0, 2))}');
     });
 
     test('and keeping Svelte s item and index', () => {
@@ -42,9 +42,9 @@ describe('an {#each} the walker still has to place', () => {
     test('and Svelte s index without a name for the row', () => {
         const { out, defs } = rewrite('{#each items, i}<li>{i}</li>{/each}');
 
-        expect(out).toContain('{#each __rows_1(), i}');
-        expect([defs[0].includes('__seq(items)'), defs[1].includes('(i)')]).toEqual([true, true]);
-        expect(rewrite('{#each (a, b)}<li>x</li>{/each}').defs[0]).toContain('__seq((a, b))');
+        expect(out).toContain('{#each __brycomp_rows_1(), i}');
+        expect([defs[0].includes('__brycomp_seq(items)'), defs[1].includes('(i)')]).toEqual([true, true]);
+        expect(rewrite('{#each (a, b)}<li>x</li>{/each}').defs[0]).toContain('__brycomp_seq((a, b))');
     });
 
     // A key that is the index, `(i)`, is Svelte's indexed block, as without
@@ -93,7 +93,7 @@ describe('a tag written the short way', () => {
     test('an attachment', () => {
         const { out, defs } = rewrite('<p {@attach mark}>x</p>');
 
-        expect(out).toContain('{@attach __attach(__expr_0())}');
+        expect(out).toContain('{@attach __brycomp_attach(__brycomp_expr_0())}');
         expect(defs[0]).toContain('return (mark)');
     });
 });
@@ -111,12 +111,12 @@ describe('what the walker refuses to touch', () => {
     test('and a comment holding an apostrophe does not open a string', () => {
         const { out } = rewrite("<!-- aujourd'hui -->{count}");
 
-        expect(out).toContain('__expr_0_memo');
+        expect(out).toContain('__brycomp_expr_0_memo');
     });
 
     test('nor does one inside a quoted attribute value', () => {
         const { defs } = rewrite('<p class="badge {label.lower()}">x</p>');
 
-        expect(defs[0]).toContain('__text(label.lower())');
+        expect(defs[0]).toContain('__brycomp_text(label.lower())');
     });
 });

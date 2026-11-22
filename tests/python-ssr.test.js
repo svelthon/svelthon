@@ -64,7 +64,7 @@ import FailedScript from './fixtures/FailedScript.svelte';
 import FailedTemplate from './fixtures/FailedTemplate.svelte';
 import SharedReader from './fixtures/SharedReader.svelte';
 import ParentFailsAfterChild from './fixtures/ParentFailsAfterChild.svelte';
-import { __pybridge, marks, track } from '../src/lib/bridge.js';
+import { __brycomp_pybridge, marks, track } from '../src/lib/bridge.js';
 import * as html from './fixtures/python-ssr-html.js';
 
 // `set_context` hands back what it was given on the server too, as Svelte's
@@ -253,7 +253,7 @@ test.for([
     ['in its template', FailedTemplate, {}],
     ['in a parent, after it', ParentFailsAfterChild, { Child: SharedReader }]
 ])('a server render that fails %s keeps no subscription to a shared list', ([, Component, props]) => {
-    const list = __pybridge.list([1]);
+    const list = __brycomp_pybridge.list([1]);
     const counts = [];
 
     track(list, () => {});
@@ -273,7 +273,7 @@ test.for([
     ['succeeds', SharedReader, {}],
     ['fails', ParentFailsAfterChild, { Child: SharedReader }]
 ])('a server render that %s with a document on the global keeps no subscription', ([outcome, Component, props]) => {
-    const list = __pybridge.list([1]);
+    const list = __brycomp_pybridge.list([1]);
     const counts = [];
 
     track(list, () => {});

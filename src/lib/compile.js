@@ -58,7 +58,7 @@ const $B = globalThis.__BRYTHON__;
 
 // What a reactive module declares its `store` object under, the name it
 // exports it by being one the module's own names may take.
-const STORE_FACADE = '__store';
+const STORE_FACADE = '__brycomp_store';
 
 // `:=` in the markup writes a name of the component in a handler's `lambda`
 // alone, which the markup pass has rewritten by then (`walrus`). Anywhere else
@@ -90,7 +90,7 @@ function refuseTemplateWalrus(ast, table, source, ranges) {
             }
 
             // The wrapper the markup pass puts around the expression,
-            // `__text(…)`, is the compiler's call and not the author's: its
+            // `__brycomp_text(…)`, is the compiler's call and not the author's: its
             // argument is the expression itself.
             const authors = node instanceof $B.ast.Call && !(node.func instanceof $B.ast.Name && COMPILER_PREFIX.test(node.func.id));
 
@@ -137,7 +137,7 @@ function refuseTemplateWalrus(ast, table, source, ranges) {
 // writes. Read off the tree, each name where Python resolves it: a write the
 // module makes, or a function that declares the name `global`, a part
 // written, `ticket.x = 1` or `ticket[0] = 1`, and the markup's `:=`, which
-// writes through `__assign`. And through the module's namespace: a key written
+// writes through `__brycomp_assign`. And through the module's namespace: a key written
 // `globals()["ticket"] = 1` is that prop, and a namespace handed on, updated or
 // written at a key no text says, any of them.
 const NAMESPACE_READS = new Set(['get', 'keys', 'values', 'items', 'copy', '__contains__', '__getitem__']);
@@ -156,7 +156,7 @@ function writtenProps(table, body, props, annotatedAt) {
     const literal = (node) => (node instanceof ast.Constant && typeof node.value === 'string' ? node.value : null);
     const LOOKUPS = ['get', '__getitem__', 'setdefault'];
     // `globals().get("ticket")`, or as the template spells it,
-    // `__getattr(globals(), "get")("ticket")`.
+    // `__brycomp_getattr(globals(), "get")("ticket")`.
     const lookedUp = (node) =>
         node instanceof ast.Call &&
         ((node.func instanceof ast.Attribute && namespace(node.func.value) && LOOKUPS.includes(node.func.attr)) ||
@@ -240,7 +240,7 @@ function writtenProps(table, body, props, annotatedAt) {
 
         if (wanted.has(name) && (through || block === table.top || isGlobalScope(scopeIn(block, name)))) written.add(name);
 
-        if (node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === '__assign' && wanted.has(node.args[0]?.value)) {
+        if (node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === '__brycomp_assign' && wanted.has(node.args[0]?.value)) {
             written.add(node.args[0].value);
         }
 
@@ -431,7 +431,7 @@ const IDENTIFIER = /^[\p{ID_Start}_][\p{ID_Continue}]*$/u;
 // any other spelling at a key writes it, `update` the keys of the dict written
 // out or of its keywords. And whether it may write at a key no text names
 // (`any`): a key computed, a dict handed to `update`, the namespace handed on.
-// A method the template reads off it is `__getattr(globals(), "get")`, its dot
+// A method the template reads off it is `__brycomp_getattr(globals(), "get")`, its dot
 // rewritten (`templateDots`), which was taken for nothing. A key deleted,
 // `del globals()["x"]` or `pop("x")`, is `removed` too.
 function namespaceKeys(body) {
@@ -956,10 +956,10 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set(), moduleN
 
             const [logger, values] = parts;
             out.push(
-                lined(`__inspect_${anonymous++} = inspect_with(lambda: (lambda: [${values}], lambda: ${logger}))`)
+                lined(`__brycomp_inspect_${anonymous++} = inspect_with(lambda: (lambda: [${values}], lambda: ${logger}))`)
             );
         } else if (watched)
-            out.push(lined(`__inspect_${anonymous++} = inspect(lambda: [${watched[2]}])`));
+            out.push(lined(`__brycomp_inspect_${anonymous++} = inspect(lambda: [${watched[2]}])`));
         // The right-hand side in parentheses, as the `=` it stands for reads it:
         // `pair => a, b` is the tuple `(a, b)`, and `=> f(a), g(a)` makes both
         // calls in the effect, rather than a second argument of the marker.
@@ -967,7 +967,7 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set(), moduleN
         else if (named) out.push(`${found[1]} = derived(lambda: (${expression}))`);
         // The generated name is bound like any other effect's, so it stays out
         // of the way with the dunder prefix Python already reads as private.
-        else out.push(`__effect_${anonymous++} = effect(lambda: (${expression}))`);
+        else out.push(`__brycomp_effect_${anonymous++} = effect(lambda: (${expression}))`);
     }
 
     return out.join('\n');
@@ -1036,75 +1036,75 @@ const pythonModuleName = (source) => source.split('/').pop().replace(/(\.svelte)
 // `track`, `follow` or `schedule` are words a Python author writes. Neither
 // guard covers them: `JS_RESERVED` refuses what JavaScript will not take, and
 // the locked list Svelthon's own vocabulary. The runtime's names are a third
-// category, and the answer is a prefix, as `helpers as __helpers` has.
+// category, and the answer is a prefix, as `helpers as __brycomp_helpers` has.
 //
 // The list is written out rather than derived, so the spelling exists as text in
 // this file: `tests/generated-names.test.js` checks that the markup pass and the
-// compiler agree on every `__name`, by reading both files, and a name computed
+// compiler agree on every `__brycomp_name`, by reading both files, and a name computed
 // at run time is invisible to it. Three of them carry the spelling the markup
 // pass emits, which is why this is a map and not a prefix.
 const RUNTIME = {
-    bind: '__bind',
-    track: '__track',
-    changesNothing: '__changesNothing',
-    follow: '__follow',
-    followOwn: '__followOwn',
-    SHAPING: '__SHAPING',
-    pyError: '__pyError',
-    pyDerive: '__pyDerive',
-    pyRead: '__pyRead',
-    pyEvent: '__pyEvent',
-    pyAttach: '__pyAttach',
-    plainData: '__plainData',
-    pyArg: '__pyArg',
-    pyData: '__pyData',
-    pyCall: '__pyCall',
-    pyTeardown: '__pyTeardown',
-    laterRoot: '__laterRoot',
-    pyComponent: '__pyComponent',
-    pyHook: '__pyHook',
-    pyExpression: '__pyExpression',
-    invoke: '__invoke',
-    pyExport: '__pyExport',
-    routeLoad: '__routeLoad',
-    routeServerLoad: '__routeServerLoad',
-    jsServerLoad: '__jsServerLoad',
-    routeActions: '__routeActions',
-    routeData: '__routeData',
-    liveExport: '__liveExport',
-    readOnlyImport: '__readOnlyImport',
-    readOnlyProp: '__readOnlyProp',
-    templateFrom: '__templateFrom',
-    fileLines: '__fileLines',
-    jsCall: '__jsCall',
-    pyBind: '__pyBind',
-    plainScalar: '__plainScalar',
-    storeMember: '__storeMember',
-    storeValue: '__storeValue',
-    storeTrack: '__storeTrack',
-    storeHeld: '__storeHeld',
-    storeShown: '__storeShown',
-    storeFacade: '__storeFacade',
-    exportedMember: '__exportedMember',
-    directiveAction: '__directiveAction',
-    directiveTransition: '__directiveTransition',
-    directiveAnimate: '__directiveAnimate',
-    NONE: '__NONE',
-    helpers: '__helpers',
-    unsubscribe: '__unsubscribe',
-    unproxied: '__unproxied',
-    handOver: '__handOver',
-    pythonModule: '__pythonModule',
-    withNamespace: '__withNamespace',
-    __pybridge: '__pybridge',
-    jsGlobal: '__global',
-    group: '__group',
-    readAttr: '__getattr',
-    restOf: '__rest',
-    unpackStarred: '__unpack',
-    writeAttr: '__setattr',
-    writeItem: '__setitem',
-    pySlice: '__slice'
+    bind: '__brycomp_bind',
+    track: '__brycomp_track',
+    changesNothing: '__brycomp_changesNothing',
+    follow: '__brycomp_follow',
+    followOwn: '__brycomp_followOwn',
+    SHAPING: '__brycomp_SHAPING',
+    pyError: '__brycomp_pyError',
+    pyDerive: '__brycomp_pyDerive',
+    pyRead: '__brycomp_pyRead',
+    pyEvent: '__brycomp_pyEvent',
+    pyAttach: '__brycomp_pyAttach',
+    plainData: '__brycomp_plainData',
+    pyArg: '__brycomp_pyArg',
+    pyData: '__brycomp_pyData',
+    pyCall: '__brycomp_pyCall',
+    pyTeardown: '__brycomp_pyTeardown',
+    laterRoot: '__brycomp_laterRoot',
+    pyComponent: '__brycomp_pyComponent',
+    pyHook: '__brycomp_pyHook',
+    pyExpression: '__brycomp_pyExpression',
+    invoke: '__brycomp_invoke',
+    pyExport: '__brycomp_pyExport',
+    routeLoad: '__brycomp_routeLoad',
+    routeServerLoad: '__brycomp_routeServerLoad',
+    jsServerLoad: '__brycomp_jsServerLoad',
+    routeActions: '__brycomp_routeActions',
+    routeData: '__brycomp_routeData',
+    liveExport: '__brycomp_liveExport',
+    readOnlyImport: '__brycomp_readOnlyImport',
+    readOnlyProp: '__brycomp_readOnlyProp',
+    templateFrom: '__brycomp_templateFrom',
+    fileLines: '__brycomp_fileLines',
+    jsCall: '__brycomp_jsCall',
+    pyBind: '__brycomp_pyBind',
+    plainScalar: '__brycomp_plainScalar',
+    storeMember: '__brycomp_storeMember',
+    storeValue: '__brycomp_storeValue',
+    storeTrack: '__brycomp_storeTrack',
+    storeHeld: '__brycomp_storeHeld',
+    storeShown: '__brycomp_storeShown',
+    storeFacade: '__brycomp_storeFacade',
+    exportedMember: '__brycomp_exportedMember',
+    directiveAction: '__brycomp_directiveAction',
+    directiveTransition: '__brycomp_directiveTransition',
+    directiveAnimate: '__brycomp_directiveAnimate',
+    NONE: '__brycomp_NONE',
+    helpers: '__brycomp_helpers',
+    unsubscribe: '__brycomp_unsubscribe',
+    unproxied: '__brycomp_unproxied',
+    handOver: '__brycomp_handOver',
+    pythonModule: '__brycomp_pythonModule',
+    withNamespace: '__brycomp_withNamespace',
+    __brycomp_pybridge: '__brycomp_pybridge',
+    jsGlobal: '__brycomp_global',
+    group: '__brycomp_group',
+    readAttr: '__brycomp_getattr',
+    restOf: '__brycomp_rest',
+    unpackStarred: '__brycomp_unpack',
+    writeAttr: '__brycomp_setattr',
+    writeItem: '__brycomp_setitem',
+    pySlice: '__brycomp_slice'
 };
 
 // What stands in for the standard modules an author reaches for first: a
@@ -1122,35 +1122,35 @@ const MODULE_INSTEAD = {
 // str(): a template may hold a foreign JavaScript value, a DOM node from
 // bind:this, on which Brython's classifier trips. These fall back.
 const ADAPTERS = {
-    __truthy: '__pybridge.truthy',
-    __hidden: '__pybridge.hidden',
-    __text: '__pybridge.str',
-    // A value alone in an attribute of text, written as `__text` writes it.
-    __attr: '__pybridge.attr',
-    __html: '__pybridge.html',
-    __seq: '__pybridge.seq',
-    __key: '__pybridge.key',
-    __class: '__pybridge.klass',
+    __brycomp_truthy: '__brycomp_pybridge.truthy',
+    __brycomp_hidden: '__brycomp_pybridge.hidden',
+    __brycomp_text: '__brycomp_pybridge.str',
+    // A value alone in an attribute of text, written as `__brycomp_text` writes it.
+    __brycomp_attr: '__brycomp_pybridge.attr',
+    __brycomp_html: '__brycomp_pybridge.html',
+    __brycomp_seq: '__brycomp_pybridge.seq',
+    __brycomp_key: '__brycomp_pybridge.key',
+    __brycomp_class: '__brycomp_pybridge.klass',
     // A handler in a spread is adapted as one written by name.
-    __spreadElement: '(value) => __pybridge.spreadElement(value, __event)',
+    __brycomp_spreadElement: '(value) => __brycomp_pybridge.spreadElement(value, __brycomp_event)',
     // And on a control a `bind:group` binds, its `value` as the group reads it.
-    __spreadChoice: '(value) => __pybridge.spreadElement(value, __event, true)',
+    __brycomp_spreadChoice: '(value) => __brycomp_pybridge.spreadElement(value, __brycomp_event, true)',
     // And on a custom element, whose properties take the values as they are.
-    __spreadCustom: '(value) => __pybridge.spreadElement(value, __event, false, true)',
-    __spread: '__pybridge.spread',
-    __spreadPython: '__pybridge.spreadPython',
+    __brycomp_spreadCustom: '(value) => __brycomp_pybridge.spreadElement(value, __brycomp_event, false, true)',
+    __brycomp_spread: '__brycomp_pybridge.spread',
+    __brycomp_spreadPython: '__brycomp_pybridge.spreadPython',
     // And on a `<svelte:element>`, the entries, which its name then reads.
-    __spreadEntries: '__pybridge.spreadEntries',
+    __brycomp_spreadEntries: '__brycomp_pybridge.spreadEntries',
     // A value boxed anew at each read, which its `<svelte:element>` then reads.
-    __boxed: '(value) => [value]',
-    __bound: '__pybridge.bound',
-    __assign: '__assign',
-    __getattr: '__getattr',
-    __rest: '__rest',
-    __unpack: '__unpack',
-    __setattr: '__setattr',
-    __setitem: '__setitem',
-    __slice: '__slice'
+    __brycomp_boxed: '(value) => [value]',
+    __brycomp_bound: '__brycomp_pybridge.bound',
+    __brycomp_assign: '__brycomp_assign',
+    __brycomp_getattr: '__brycomp_getattr',
+    __brycomp_rest: '__brycomp_rest',
+    __brycomp_unpack: '__brycomp_unpack',
+    __brycomp_setattr: '__brycomp_setattr',
+    __brycomp_setitem: '__brycomp_setitem',
+    __brycomp_slice: '__brycomp_slice'
 };
 
 // What Brycomp is told of the framework it compiles for, by the interface its
@@ -1210,7 +1210,7 @@ const HOST = {
 // `__rev_value__` beside the author's `value__`, and a bare read of the
 // module's `__rev_value__` found the instance's. Getters, so a name is read as
 // it holds now.
-const MODULE_READERS = '__svelthon_module';
+const MODULE_READERS = '__brycomp_svelthon_module';
 
 // The questions the runtime asks of Svelte, answered by runes, handed to the
 // bridge the module imports as `bridge`: a store's, in its own module, and a
@@ -1225,10 +1225,10 @@ const MODULE_READERS = '__svelthon_module';
 // derived of Svelte's, which a binding's read crosses through (`boundRead`).
 const bridgeHooks = (bridge) => [
     `${bridge}.tracking(() => $effect.tracking());`,
-    `let __svelthon_unchanged = $state.raw(0);`,
-    `${bridge}.refusing(() => { __svelthon_unchanged = 0; });`,
-    `class __SvelthonStateBox { value = $state(); }`,
-    `${bridge}.proxying((value) => { const box = new __SvelthonStateBox(); box.value = value; return box.value; });`,
+    `let __brycomp_svelthon_unchanged = $state.raw(0);`,
+    `${bridge}.refusing(() => { __brycomp_svelthon_unchanged = 0; });`,
+    `class __brycomp_SvelthonStateBox { value = $state(); }`,
+    `${bridge}.proxying((value) => { const box = new __brycomp_SvelthonStateBox(); box.value = value; return box.value; });`,
     `${bridge}.deriving((read) => { const value = $derived.by(read); return () => value; });`
 ];
 
@@ -1251,23 +1251,23 @@ const arityOf = (args) =>
 // Which wrapper a component's function gets: the runtime holds both, and this
 // says which one. An expression function the markup compiled takes its arguments
 // already Python; everything else here is called by Svelte, with Svelte's values.
-const componentWrapper = (f) => (f.name.startsWith(EXPR_PREFIX) ? '__pyExpression' : '__pyComponent');
+const componentWrapper = (f) => (f.name.startsWith(EXPR_PREFIX) ? '__brycomp_pyExpression' : '__brycomp_pyComponent');
 
 // The template functions whose value Python reads again, named so by the markup
 // pass: a declaration of the markup and a `{@render}` argument (`py_`), and a
 // default inside a pattern (`lazy_`). Their value is handed back as it is.
-const KEPT_PYTHON = /^__expr_(?:py|lazy)_/;
+const KEPT_PYTHON = /^__brycomp_expr_(?:py|lazy)_/;
 // An expression whose value a binding compares, named by how: `scalar_`, a
 // container keeping its identity and a scalar made JavaScript's,
 // `selection_`, the list of a `<select multiple>`, item by item, and
 // `choice_`, the value of a control a `bind:group` binds.
-const COMPARED = /^__expr_(scalar|selection|choice)_/;
+const COMPARED = /^__brycomp_expr_(scalar|selection|choice)_/;
 // A prop handed to a child written in Python (`child_`): the Python value
 // itself, None the `undefined` it is at every door.
-const HANDED = /^__expr_child_/;
+const HANDED = /^__brycomp_expr_child_/;
 // The write half of a binding, `set_`, which an input event calls and not the
 // render.
-const WRITES = /^__expr_set_/;
+const WRITES = /^__brycomp_expr_set_/;
 
 // A helper takes no name the author's script or JavaScript already gives the
 // module (`foreign`): `importjs {host}` is the author's `host`, which the helper
@@ -1280,11 +1280,11 @@ const injectable = (one, { declared, foreign = [], names, starred, element }, co
     (!one.element || element || !starred);
 
 // A locked name is Svelthon's own word (`HOST.reserved`), refused by Brycomp.
-// The compiler's own prefix (Brycomp's `COMPILER_PREFIX`) keeps six families of
-// name this file builds out of the author's, `__fn_go`, `__rev_c`, `__bump_c`,
-// `__local_n`, `__js_mount`, `__root_loop`, declared in the same scope as the
-// author's names, beside `__proto`.
-const GENERATED = new RegExp(`^(?:${EXPR_PREFIX}|__inspect_|__effect_)`);
+// The compiler's own prefix (Brycomp's `COMPILER_PREFIX`, `__brycomp_`) starts
+// every name this file builds, out of the author's (`__brycomp_fn_go`,
+// `__brycomp_rev_c`) or not (`__brycomp_proto`), declared in the same scope as
+// the author's names.
+const GENERATED = new RegExp(`^(?:${EXPR_PREFIX}|__brycomp_inspect_|__brycomp_effect_)`);
 
 // `refuseLocked` lets those shapes through because the compiler writes them;
 // the author's own text must not hold one, or a function the compiler writes
@@ -1327,12 +1327,10 @@ function refuseLocked(declared, component, source, lines, lineOffset = 0) {
         const at = lines?.get(reserved);
 
         throw refuse(
-            `svelthon — \`${reserved}\` starts with \`__\`, which is the compiler's own ` +
-                `prefix (${at === undefined ? source : `${source}:${at + lineOffset}`}). It ` +
-                `builds names like \`__fn_${reserved}\` and \`__rev_${reserved}\` out of ` +
-                `yours, in the same scope, so a name of that shape collides with one of ` +
-                `them. Python's own names end with \`__\` as well, \`__all__\` or \`__doc__\`, ` +
-                `and those are free.`,
+            `svelthon — \`${reserved}\` starts with \`__brycomp_\`, which is the compiler's own ` +
+                `prefix (${at === undefined ? source : `${source}:${at + lineOffset}`}). Every ` +
+                `name it writes beside yours starts with it, in the same scope, so a name of ` +
+                `that shape collides with one of them. Any other name is yours.`,
             source,
             at === undefined ? undefined : at + lineOffset
         );
@@ -1369,7 +1367,7 @@ function refuseRemarked(remarked, source, lines, lineOffset = 0) {
 
 const injections = (c, component) =>
     INJECTED.filter((one) => injectable(one, c, component)).map(
-        (one) => `__bind(__proto, '${one.name}', ${one.value}, undefined, undefined, false);`
+        (one) => `__brycomp_bind(__brycomp_proto, '${one.name}', ${one.value}, undefined, undefined, false);`
     );
 
 // The lines those injections need in the component's preamble, before any of
@@ -1642,8 +1640,8 @@ const MARKERS = ['derived', 'effect', 'inspect', 'inspect_with', 'export'];
 // statement holding one is numbered, in the order of the source, its `mark`.
 //
 // The JavaScript reads each of those words as a marker of its own statement
-// (`translate`, `__pybridge.rune`): the binding of a declaration is the first
-// write of its name once its own marker has run (`__pybridge.declaration`).
+// (`translate`, `__brycomp_pybridge.rune`): the binding of a declaration is the first
+// write of its name once its own marker has run (`__brycomp_pybridge.declaration`).
 // Any other `derived`, an alias, `globals()["derived"]`, is the identity, and
 // marks nothing: counted, an alias called once made every declaration after it
 // take what a `:=` wrote before its binding for its body.
@@ -1681,14 +1679,14 @@ function runeMarkerWords(body, theirs) {
 
 // The name the JavaScript reads for the marker of statement `mark`, whichever
 // of `derived` and `effect` the statement wrote.
-const markerName = (mark) => `__R${mark.toString(36)}`;
+const markerName = (mark) => `__brycomp_R${mark.toString(36)}`;
 
 // The markers the JavaScript reads in place of `derived` and `effect` at each
 // declaration, published as helpers are, no name of the module's own.
 const markerBindings = (c) =>
     Array.from(
         { length: c.marked },
-        (_, at) => `__bind(__proto, '${markerName(at + 1)}', () => __pybridge.rune(${at + 1}), undefined, undefined, false);`
+        (_, at) => `__brycomp_bind(__brycomp_proto, '${markerName(at + 1)}', () => __brycomp_pybridge.rune(${at + 1}), undefined, undefined, false);`
     );
 
 // The names JavaScript gives the module, an `importjs` and its `<script
@@ -1953,9 +1951,9 @@ function surface(body, theirs = new Set()) {
                     bind(target.id);
 
                     // `x => expr` arrives here as `x = derived(lambda: expr)`, and
-                    // `=> expr` as `__effect_0 = effect(lambda: expr)`. The emission
+                    // `=> expr` as `__brycomp_effect_0 = effect(lambda: expr)`. The emission
                     // below needs no special case for either: it already writes
-                    // `$derived.by(() => __fn_x())` and `$effect(() => __fn_x())`,
+                    // `$derived.by(() => __brycomp_fn_x())` and `$effect(() => __brycomp_fn_x())`,
                     // and a lambda answers a call exactly as a `def` does.
                     if (marked(node, 'derived')) deriveds.push({ name: target.id, arity: 0, mark: marks.get(node) });
                     else if (marked(node, 'effect')) effects.push({ name: target.id, arity: 0, mark: marks.get(node) });
@@ -2144,13 +2142,13 @@ function surface(body, theirs = new Set()) {
 // The names the emitted script gives to what it generates. Pure functions of the
 // author's name. `markup.js` writes calls to the same spellings, and
 // `tests/generated-names.test.js` holds the two files to them.
-const fn = (name) => `__fn_${name}`;
+const fn = (name) => `__brycomp_fn_${name}`;
 
 // The variable a plain module holds a name's value in. Under the name itself,
 // it was what SvelteKit took for the export of that name in a remote module,
 // which it rewrites into a constant when the function is prerendered, and the
 // body's write to it stopped the build (`ILLEGAL_REASSIGNMENT`).
-const held = (name) => `__var_${name}`;
+const held = (name) => `__brycomp_var_${name}`;
 
 // The JavaScript name of a `def`'s wrapper in a rune script: its own, unless it
 // is a rune's. Svelte reads `$state` as a subscription to a store once the script
@@ -2160,16 +2158,16 @@ const held = (name) => `__var_${name}`;
 // declared by a rune and is not read that way. Exported under its own name.
 // The runes are the host's list (`HOST.runes`), the one a JavaScript import
 // named like one is held under another variable by.
-const wrapperName = (name) => (HOST.runes.includes(name) ? `__def_${name}` : name);
+const wrapperName = (name) => (HOST.runes.includes(name) ? `__brycomp_def_${name}` : name);
 // And a prop's variable, its key in the props still the name.
-const bindableVariable = (name) => (HOST.runes.includes(name) ? `__prop_${name}` : name);
+const bindableVariable = (name) => (HOST.runes.includes(name) ? `__brycomp_prop_${name}` : name);
 // A prop's last scalar written by Python, beside the number Svelte was handed
 // for it (`handOver`), and the default it declares, which Svelte reads when
 // the parent leaves it `undefined`.
-const crossed = (name) => `__crossed_${name}`;
-const bindableDefault = (name) => `__declared_${name}`;
+const crossed = (name) => `__brycomp_crossed_${name}`;
+const bindableDefault = (name) => `__brycomp_declared_${name}`;
 // What the parent passes it, `undefined` when nothing, read past the fallback.
-const passed = (name) => `__passed_${name}`;
+const passed = (name) => `__brycomp_passed_${name}`;
 // Read where Python needs it: a default that may cross as the parent's value
 // does (`ambiguous`), and a write of the module's, which holds until the parent
 // passes a value (`unproxied`). A custom element's page passes none Python reads.
@@ -2179,26 +2177,26 @@ const readsPassed = (c, b) =>
         : !c.element && (c.defaulted.includes(b) || c.written.has(b));
 // What a prop the module writes holds, as Python last read or wrote it, which
 // a write of the same value hands back to Svelte.
-const seenOf = (name) => `__seen_${name}`;
+const seenOf = (name) => `__brycomp_seen_${name}`;
 // What `$effect.root` hands back. Python reads the decorated name and gets
 // this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
 // the name belongs to the destructor on both sides.
-const destroyer = (name) => `__root_${name}`;
+const destroyer = (name) => `__brycomp_root_${name}`;
 // What an effect's name holds once a write other than its declaration's has
 // reached it, boxed, so that `del`, which writes `undefined`, is told from no
 // write at all. The effect keeps the body it was declared with, as Python
 // keeps the function a decorator registered when the name is bound again.
-const named = (name) => `__named_${name}`;
+const named = (name) => `__brycomp_named_${name}`;
 // Whether a derived's declaration has bound its body: until then the name
 // reads what it holds through its cell, and not through Svelte's derived, which
 // on a server keeps the first value read from it.
-const installed = (name) => `__installed_${name}`;
+const installed = (name) => `__brycomp_installed_${name}`;
 // What an instance's `@export` hands a parent, the function the name holds.
-const api = (name) => `__api_${name}`;
+const api = (name) => `__brycomp_api_${name}`;
 
 // A write to a rune's name: the binding of its declaration installs its body,
 // and any other is the name's, a write before the binding included
-// (`__pybridge.declaration`, `1`, `-1`, `0`). The setter is a `function`,
+// (`__brycomp_pybridge.declaration`, `1`, `-1`, `0`). The setter is a `function`,
 // whose `this` is the namespace written.
 //
 // A derived's is Svelte's write to its derived, `doubled = 99`: the name holds
@@ -2207,7 +2205,7 @@ const api = (name) => `__api_${name}`;
 // in a plain module, which follows nothing, it holds the value for good. `del`
 // writes `undefined`, which leaves no body, and runs nothing. Taken for a
 // body, 99 was called at the next read.
-const declaration = (one) => `__pybridge.declaration(this, '${one.name}', ${one.mark})`;
+const declaration = (one) => `__brycomp_pybridge.declaration(this, '${one.name}', ${one.mark})`;
 
 // What a cell holds as itself, kept beside it and written with it. Svelte hands
 // a cleanup run before the batch that wrote a state ends what the state held
@@ -2221,8 +2219,8 @@ const declaration = (one) => `__pybridge.declaration(this, '${one.name}', ${one.
 // its declaration's gave an effect's name are kept here. Every read a cleanup
 // may make goes through one of them: the name's value, the source `globals()`
 // asks whether the name is bound, the setter's question, a store's getter.
-const heldOf = (name) => `__held_${name}`;
-const namedHeld = (name) => `__namedheld_${name}`;
+const heldOf = (name) => `__brycomp_held_${name}`;
+const namedHeld = (name) => `__brycomp_namedheld_${name}`;
 const orHeld = (cell, held) => `(${cell} ?? ${held})`;
 const stateRead = (name, cell) => orHeld(cell, `${bump(name)}.held`);
 const cellRead = (name) => orHeld(fn(name), heldOf(name));
@@ -2237,8 +2235,8 @@ const derivedWrite = (d, plain = false) => {
 
     return (
         `if (${NEXT_VALUE} === undefined) ${write(NEXT_VALUE)};` +
-        ` else { const __at = ${declaration(d)}; if (__at > 0) ${bound}` +
-        (plain ? ` else ${held}` : ` else if (__at < 0 || ${cellRead(d.name)} === undefined) ${held} else ${d.name} = ${NEXT_VALUE};`) +
+        ` else { const __brycomp_at = ${declaration(d)}; if (__brycomp_at > 0) ${bound}` +
+        (plain ? ` else ${held}` : ` else if (__brycomp_at < 0 || ${cellRead(d.name)} === undefined) ${held} else ${d.name} = ${NEXT_VALUE};`) +
         ` }`
     );
 };
@@ -2260,14 +2258,14 @@ const holders = (c) => releases(c) && c.effects.some((e) => e.root);
 // The instance's list of subscriptions, and whether it has any to make. A
 // component that holds no state and no bindable never calls `track`, so it gets
 // neither the list nor the teardown that empties it.
-const SUBS = '__subs';
+const SUBS = '__brycomp_subs';
 
 const SUBSCRIBING = (c) =>
     c.state.length > 0 || c.funcs.length > 0 || c.bindables.length > 0 || c.starred;
 
 // The revision of a name: Svelte's state beside the cell, which a change in
 // place of what the cell holds moves (Brycomp's `bump`).
-const rev = (name) => `__rev_${name}`;
+const rev = (name) => `__brycomp_rev_${name}`;
 
 // The component script, one function per section.
 //
@@ -2277,12 +2275,12 @@ const rev = (name) => `__rev_${name}`;
 
 function preamble(c) {
     return [
-        `import { init as __init } from ${JSON.stringify(c.body)};`,
-        // The bridge behind `__truthy` and the three beside it. Imported under a
+        `import { init as __brycomp_init } from ${JSON.stringify(c.body)};`,
+        // The bridge behind `__brycomp_truthy` and the three beside it. Imported under a
         // name no one would type: only generated code touches it, and `py` is a
         // name an author may want.
         `import { ${runtimeAliases(HOST, [
-            'bind', '__pybridge', 'jsGlobal', 'track', 'changesNothing', 'follow', 'followOwn', 'SHAPING', 'pyError',
+            'bind', '__brycomp_pybridge', 'jsGlobal', 'track', 'changesNothing', 'follow', 'followOwn', 'SHAPING', 'pyError',
             'pyDerive', 'pyRead', 'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
             'pyBind', 'NONE', 'helpers',
@@ -2311,9 +2309,9 @@ function preamble(c) {
         // Under the engine's prefix like every other name it lends: the
         // author's names live in the same scope, and an `importjs { untrack }`
         // or a `def getContext()` of theirs is theirs.
-        `import { ${['getContext as __getContext', 'setContext as __setContext', 'getAllContexts as __getAllContexts']
-            .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') || c.bindables.length || exportsApi(c) ? ['untrack as __untrack'] : [])
-            .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
+        `import { ${['getContext as __brycomp_getContext', 'setContext as __brycomp_setContext', 'getAllContexts as __brycomp_getAllContexts']
+            .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') || c.bindables.length || exportsApi(c) ? ['untrack as __brycomp_untrack'] : [])
+            .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __brycomp_onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
         // The questions the runtime asks of Svelte (`bridgeHooks`): a plain
         // module has none. A component's are laid down in its `<script
@@ -2322,10 +2320,10 @@ function preamble(c) {
         // mount, they were functions of the instance's scope, which the
         // runtime keeps, and the last instance's props stayed alive once it
         // was gone. A store is a module, and has no instance to keep.
-        ...(c.store ? bridgeHooks('__pybridge') : []),
+        ...(c.store ? bridgeHooks('__brycomp_pybridge') : []),
         // What marks a state of Svelte's own, which `$state` looks for in the
         // probe it is handed (`stateOwned`).
-        `let __stateProbe = $state(__pybridge.stateProbe());`,
+        `let __brycomp_stateProbe = $state(__brycomp_pybridge.stateProbe());`,
         ``
     ];
 }
@@ -2351,8 +2349,8 @@ function declarations(c) {
                   // that crossing, as it read a value init() handed over.
                   // A prop that declares none, or `None`, has none, as
                   // `$bindable()` and `$bindable(undefined)` have none.
-                  ...(defaulted.length ? [`class __Declared { value = $state.raw(); py = undefined; }`] : []),
-                  ...defaulted.map((b) => `const ${bindableDefault(b)} = new __Declared();`),
+                  ...(defaulted.length ? [`class __brycomp_Declared { value = $state.raw(); py = undefined; }`] : []),
+                  ...defaulted.map((b) => `const ${bindableDefault(b)} = new __brycomp_Declared();`),
                   // A plain prop destructured plain (`plainProps`), its default
                   // the literal written when it is one (`literals`). And what
                   // the parent passes it read beside, where Python needs it
@@ -2402,7 +2400,7 @@ function declarations(c) {
             `let ${fn(d.name)} = $state.raw(undefined);`,
             `let ${heldOf(d.name)};`,
             `let ${installed(d.name)} = false;`,
-            `let ${d.name} = $derived.by(${RUNTIME.pyDerive}(() => __invoke(${cellRead(d.name)}), ${JSON.stringify(`${d.name}() — ${c.source}`)}));`
+            `let ${d.name} = $derived.by(${RUNTIME.pyDerive}(() => __brycomp_invoke(${cellRead(d.name)}), ${JSON.stringify(`${d.name}() — ${c.source}`)}));`
         ]),
         // Which containers this instance signed onto, so it can sign off when
         // it goes. A container reached through a store outlives the components
@@ -2417,13 +2415,13 @@ function declarations(c) {
         // start (`unsubscribe`), so it signs onto nothing.
         //
         // In a browser the list is let go once, when the instance goes
-        // (`__leave`), and the way it goes is laid down before anything can
+        // (`__brycomp_leave`), and the way it goes is laid down before anything can
         // fail. A construction that raises, in the script, the template or an
         // effect, is torn down by its boundary before any `onDestroy` has run,
         // since Svelte's runs as a deferred effect: an effect run at once
         // (`$effect.pre`) leaves its teardown in place from the start.
         //
-        // A server is told as Svelte tells it (`__pybridge.browser`), and not by
+        // A server is told as Svelte tells it (`__brycomp_pybridge.browser`), and not by
         // the `document` it lacks: one that has one, a DOM laid down for a
         // library or a test run under jsdom, kept a list for every render. And
         // the list goes when a render closes too, as Svelte calls `onDestroy`
@@ -2435,14 +2433,14 @@ function declarations(c) {
         ...(releases(c)
             ? [
                   `const ${SUBS} = [];`,
-                  `if (!__pybridge.browser) __unsubscribe(${SUBS});`,
+                  `if (!__brycomp_pybridge.browser) __brycomp_unsubscribe(${SUBS});`,
                   ...(holders(c)
-                      ? [`let __holders = 1;`, `const __release = () => { if (--__holders === 0) __unsubscribe(${SUBS}); };`]
+                      ? [`let __brycomp_holders = 1;`, `const __brycomp_release = () => { if (--__brycomp_holders === 0) __brycomp_unsubscribe(${SUBS}); };`]
                       : []),
-                  `let __gone = false;`,
-                  `const __leave = () => { if (__gone) return; __gone = true; ${holders(c) ? '__release();' : `__unsubscribe(${SUBS});`} };`,
-                  `$effect.pre(() => __leave);`,
-                  `__onDestroy(__leave);`
+                  `let __brycomp_gone = false;`,
+                  `const __brycomp_leave = () => { if (__brycomp_gone) return; __brycomp_gone = true; ${holders(c) ? '__brycomp_release();' : `__brycomp_unsubscribe(${SUBS});`} };`,
+                  `$effect.pre(() => __brycomp_leave);`,
+                  `__brycomp_onDestroy(__brycomp_leave);`
               ]
             : []),
         ``
@@ -2456,16 +2454,16 @@ function templateBridge(c) {
     if (c.store) return [];
 
     return [
-        `const __event = (fn) => __pyEvent(fn);`,
-        `const __attach = (fn) => __pyAttach(fn);`,
+        `const __brycomp_event = (fn) => __brycomp_pyEvent(fn);`,
+        `const __brycomp_attach = (fn) => __brycomp_pyAttach(fn);`,
         // What an `{#each}` walks, declared beside it by the markup, `{const
-        // __rows_… = __collection(…)}` read as `{#each __rows_…() as row}`:
+        // __brycomp_rows_… = __brycomp_collection(…)}` read as `{#each __brycomp_rows_…() as row}`:
         // the iterable evaluated in a derived, as Svelte evaluates a block's
         // collection, so a write made while the template walks is refused
         // there too, and wrapped, so a list changed in place, the same object,
         // still reaches the effect placed before the block, which
         // moves the block's revision only when the rows differ
-        // (`__pybridge.walk`), and which a keyed block's walk tells of a
+        // (`__brycomp_pybridge.walk`), and which a keyed block's walk tells of a
         // change under any row it holds (`watch`), its key maybe moved. A
         // derived alone would not do: Svelte runs a
         // block again, unasked, whenever an effect writes something it reaches
@@ -2473,8 +2471,8 @@ function templateBridge(c) {
         // a thousand times. Written here, in runes, since the runtime knows no
         // host; a server, which has no effect, takes the rows as the block
         // reads them.
-        `const __collection = (compute, keyOf) => {`,
-        `    const walk = __pybridge.walk(keyOf);`,
+        `const __brycomp_collection = (compute, keyOf) => {`,
+        `    const walk = __brycomp_pybridge.walk(keyOf);`,
         `    const yielded = $derived.by(() => ({ rows: walk.computed(compute) }));`,
         `    let revision = $state.raw(0);`,
         `    let count = 0;`,
@@ -2486,10 +2484,10 @@ function templateBridge(c) {
         // What `(name := value)` in a handler compiles to. The write goes
         // through the namespace, so through the accessor, so the signal fires:
         // the whole reason the walrus can mean this here.
-        `const __assign = (name, value) => { ${NS}[name] = value; return value; };`
+        `const __brycomp_assign = (name, value) => { ${NS}[name] = value; return value; };`
         // The same walrus aimed at an attribute or a key rather than a name,
         // and `bind:group`'s action, are imported under the names the markup
-        // pass emits (`__setattr`, `__setitem`, `__group`) rather than
+        // pass emits (`__brycomp_setattr`, `__brycomp_setitem`, `__brycomp_group`) rather than
         // assigned here from a bare one an author could have declared.
     ];
 }
@@ -2503,7 +2501,7 @@ function templateBridge(c) {
 // checks (`repr((1, 2))` raises "descriptor '__repr__' requires a 'tuple'
 // object but received a 'tuple'"). $state.raw keeps values opaque, so the cell
 // follows *rebinding a name*, and a revision signal beside it follows a
-// mutation in place: `__track` marks the container, and `items.append(x)` bumps
+// mutation in place: `__brycomp_track` marks the container, and `items.append(x)` bumps
 // the revision every reader also reads, the object keeping its identity.
 //
 // The names `class` binds that no other binding of the module takes.
@@ -2520,24 +2518,24 @@ const declaredClasses = (c) => {
 const declaring = (c, n) =>
     c.annotatedAt?.[n] === undefined
         ? 'false'
-        : `__undeclared.has('${n}') && __pybridge.declaring(this, ${c.annotatedAt[n]}) && __undeclared.delete('${n}')`;
+        : `__brycomp_undeclared.has('${n}') && __brycomp_pybridge.declaring(this, ${c.annotatedAt[n]}) && __brycomp_undeclared.delete('${n}')`;
 
 // The props whose default init() has yet to write, emptied when it returns.
 const undeclared = (c) =>
-    `const __undeclared = new __global.Set(${JSON.stringify(c.bindables.filter((n) => c.annotatedAt?.[n] !== undefined))});`;
+    `const __brycomp_undeclared = new __brycomp_global.Set(${JSON.stringify(c.bindables.filter((n) => c.annotatedAt?.[n] !== undefined))});`;
 
 function authorBindings(c) {
     return [
         // The namespace inherits its bindings' accessors and nothing else: a
         // name the program never bound, `constructor` or `toString`, is
         // unbound, where `Object.prototype` answered it with a function.
-        `const __proto = __global.Object.create(null);`,
+        `const __brycomp_proto = __brycomp_global.Object.create(null);`,
         // The names a `from m import *` binds get their accessors at run time,
         // in a component unsubscribed with its own list; a store keeps its
         // subscriptions for as long as the page, and notes each under `names`,
         // which it publishes when it has no `__all__` (`starredMembers`).
         ...(c.starred
-            ? [`__global.Object.defineProperty(__proto, '$bryntimeStarred', { value: { owner: ${c.store ? 'undefined, names: new __global.Set()' : SUBS} } });`]
+            ? [`__brycomp_global.Object.defineProperty(__brycomp_proto, '$bryntimeStarred', { value: { owner: ${c.store ? 'undefined, names: new __brycomp_global.Set()' : SUBS} } });`]
             : []),
         // What Python writes goes up as JavaScript's own, a scalar its number
         // and a container its view, its original kept beside it (`handOver`),
@@ -2587,61 +2585,61 @@ function authorBindings(c) {
             const routed = b === 'data' && routeComponent(c.source);
             const readOnly = plainProp && !c.written.has(b);
             const seen = seenOf(b);
-            const read = readOnly ? (routed ? bound : `__pybridge.readProp(() => ${bound})`) : plainProp ? `(${seen} = ${bound})` : bound;
+            const read = readOnly ? (routed ? bound : `__brycomp_pybridge.readProp(() => ${bound})`) : plainProp ? `(${seen} = ${bound})` : bound;
             const given = readsPassed(c, b) ? passed(b) : 'undefined';
-            const parentNow = readsPassed(c, b) ? `, () => __untrack(() => ${passed(b)})` : '';
+            const parentNow = readsPassed(c, b) ? `, () => __brycomp_untrack(() => ${passed(b)})` : '';
             const held = !declared
-                ? `__unproxied(${read}, ${crossed(b)}, ${given})`
+                ? `__brycomp_unproxied(${read}, ${crossed(b)}, ${given})`
                 : readOnly
-                  ? `((__read) => (__read === undefined ? ${box}.py : __unproxied(__read, ${crossed(b)}, ${given}, ${box})))(${read})`
-                  : `__unproxied(${read}, ${crossed(b)}, ${given}, ${box})`;
-            const written = `const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`});`;
+                  ? `((__brycomp_read) => (__brycomp_read === undefined ? ${box}.py : __brycomp_unproxied(__brycomp_read, ${crossed(b)}, ${given}, ${box})))(${read})`
+                  : `__brycomp_unproxied(${read}, ${crossed(b)}, ${given}, ${box})`;
+            const written = `const __brycomp_written = __brycomp_track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`});`;
             const handed = plainProp
-                ? `${crossed(b)} = __handOver(__written, (__crossing) => { ${bound} = ${seen} = __changesNothing(__written, ${seen}) ? ${seen} : __crossing; }${parentNow});` +
-                  ` if (!__changesNothing(__written, ${bump(b)}.last)) { ${bump(b)}.last = __written; ${bump(b)}(); }`
-                : `const __was = __untrack(() => ${held});` +
-                  ` ${crossed(b)} = __handOver(__written, (__crossing) => { ${bound} = __crossing; }${parentNow});` +
-                  ` if (!__changesNothing(__pyBind(__untrack(() => ${held})), __pyBind(__was))) ${bump(b)}();`;
+                ? `${crossed(b)} = __brycomp_handOver(__brycomp_written, (__brycomp_crossing) => { ${bound} = ${seen} = __brycomp_changesNothing(__brycomp_written, ${seen}) ? ${seen} : __brycomp_crossing; }${parentNow});` +
+                  ` if (!__brycomp_changesNothing(__brycomp_written, ${bump(b)}.last)) { ${bump(b)}.last = __brycomp_written; ${bump(b)}(); }`
+                : `const __brycomp_was = __brycomp_untrack(() => ${held});` +
+                  ` ${crossed(b)} = __brycomp_handOver(__brycomp_written, (__brycomp_crossing) => { ${bound} = __brycomp_crossing; }${parentNow});` +
+                  ` if (!__brycomp_changesNothing(__brycomp_pyBind(__brycomp_untrack(() => ${held})), __brycomp_pyBind(__brycomp_was))) ${bump(b)}();`;
             const assigned = declared
-                ? `${written} if (${declaring(c, b)}) { ${box}.py = __written;` +
-                  ` __handOver(__written, (__crossing) => { ${box}.value = __crossing; });` +
+                ? `${written} if (${declaring(c, b)}) { ${box}.py = __brycomp_written;` +
+                  ` __brycomp_handOver(__brycomp_written, (__brycomp_crossing) => { ${box}.value = __brycomp_crossing; });` +
                   ` if (${bound} !== undefined) return; } ${handed}`
                 : `if (!(${declaring(c, b)}) || ${bound} === undefined) { ${written} ${handed} }`;
             const refused = `${RUNTIME.readOnlyProp}('${b}', ${JSON.stringify(c.source)});`;
             const set = readOnly
                 ? declared
-                    ? `if (${declaring(c, b)}) { ${written} ${box}.py = __written;` +
-                      ` __handOver(__written, (__crossing) => { ${box}.value = __crossing; }); ${bump(b)}(); return; } ${refused}`
+                    ? `if (${declaring(c, b)}) { ${written} ${box}.py = __brycomp_written;` +
+                      ` __brycomp_handOver(__brycomp_written, (__brycomp_crossing) => { ${box}.value = __brycomp_crossing; }); ${bump(b)}(); return; } ${refused}`
                     : `if (${declaring(c, b)}) return; ${refused}`
                 : plainProp
-                  ? `const __held = ${bump(b)}.held; try { ${assigned} } catch (__refused) { __track(__held, ${bump(b)}, ${SUBS}); throw __refused; }`
+                  ? `const __brycomp_held = ${bump(b)}.held; try { ${assigned} } catch (__brycomp_refused) { __brycomp_track(__brycomp_held, ${bump(b)}, ${SUBS}); throw __brycomp_refused; }`
                   : assigned;
-            const value = plainProp ? `(${bump(b)}.last = __pybridge.prop(${routed ? RUNTIME.routeData : '__pyBind'}(${held})))` : `__pyBind(${held})`;
+            const value = plainProp ? `(${bump(b)}.last = __brycomp_pybridge.prop(${routed ? RUNTIME.routeData : '__brycomp_pyBind'}(${held})))` : `__brycomp_pyBind(${held})`;
 
             return (
-                `__bind(__proto, '${b}', () => (__SHAPING.on ? __followOwn(${value}) : (${rev(b)}, __follow(${value}))),` +
+                `__brycomp_bind(__brycomp_proto, '${b}', () => (__brycomp_SHAPING.on ? __brycomp_followOwn(${value}) : (${rev(b)}, __brycomp_follow(${value}))),` +
                 ` function (${NEXT_VALUE}) { ${set} }, () => ${plainProp && !readOnly ? `(${seen} = ${bound})` : bound});`
             );
         }),
         // Brycomp's accessor (`stateBinding`): the rows of an `{#each}` follow
         // the value's own changes and what they read under it
-        // (`__pybridge.walk`). A store's name keeps JavaScript's array as it
+        // (`__brycomp_pybridge.walk`). A store's name keeps JavaScript's array as it
         // was handed until Python reads it (`storeTrack`, `storeHeld`).
         ...c.state.map((n) => stateBinding(HOST, n, n, c.store ? { track: RUNTIME.storeTrack, read: RUNTIME.storeHeld } : { subs: SUBS })),
         // A name bound by `class` is declared, no state: no revision, no watch.
         // Its accessor follows, in a reaction, the special methods its
         // metaclass gives it when the metaclass is the author's
-        // (`__pybridge.declared`), which an operation on the class looks up and
+        // (`__brycomp_pybridge.declared`), which an operation on the class looks up and
         // no read names; any other class is written as the namespace's own
-        // property as its statement runs (`__pybridge.declare`), and read as
+        // property as its statement runs (`__brycomp_pybridge.declare`), and read as
         // any name is. A name another binding gives an accessor keeps that one.
         ...declaredClasses(c).flatMap((n, at) => [
-            ...(at === 0 ? ['const __classes = __global.Object.create(null);'] : []),
-            `__bind(__proto, '${n}', () => __pybridge.declared(__classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __pybridge.declare(this, '${n}', ${NEXT_VALUE}, __classes); });`
+            ...(at === 0 ? ['const __brycomp_classes = __brycomp_global.Object.create(null);'] : []),
+            `__brycomp_bind(__brycomp_proto, '${n}', () => __brycomp_pybridge.declared(__brycomp_classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __brycomp_pybridge.declare(this, '${n}', ${NEXT_VALUE}, __brycomp_classes); });`
         ]),
         ...c.funcs.map((f) => stateBinding(HOST, f.name, fn(f.name), { subs: c.store ? null : SUBS, held: stateRead(f.name, fn(f.name)) })),
         ...c.inspects.map(
-            (i) => `__bind(__proto, '${i.name}', () => ${cellRead(i.name)}, (${NEXT_VALUE}) => { ${cellWrite(i.name, NEXT_VALUE)}; });`
+            (i) => `__brycomp_bind(__brycomp_proto, '${i.name}', () => ${cellRead(i.name)}, (${NEXT_VALUE}) => { ${cellWrite(i.name, NEXT_VALUE)}; });`
         ),
         // A root's name reads as its destructor, once its `def` has run and
         // before the root is made (`laterRoot`); the setter takes the function
@@ -2649,19 +2647,19 @@ function authorBindings(c) {
         // runs, and any other write is the name's (`effectWrite`).
         ...c.effects.map((e) =>
             e.root
-                ? `__bind(__proto, '${e.name}', () => (${namedRead(e.name)} !== undefined ? ${namedRead(e.name)}.value : ` +
+                ? `__brycomp_bind(__brycomp_proto, '${e.name}', () => (${namedRead(e.name)} !== undefined ? ${namedRead(e.name)}.value : ` +
                   `${cellRead(e.name)} === undefined ? undefined : ${destroyer(e.name)}.stop), ` +
                   `function (${NEXT_VALUE}) { ${effectWrite(e)} }, () => ${effectName(e.name)});`
-                : `__bind(__proto, '${e.name}', () => ${effectName(e.name)}, function (${NEXT_VALUE}) { ${effectWrite(e)} });`
+                : `__brycomp_bind(__brycomp_proto, '${e.name}', () => ${effectName(e.name)}, function (${NEXT_VALUE}) { ${effectWrite(e)} });`
         ),
-        // __follow(): a @derived that hands back a container it was given is the one
+        // __brycomp_follow(): a @derived that hands back a container it was given is the one
         // place the revision cannot travel by itself: Svelte memoises the
         // derived on `===`, so the reader subscribes to the object instead.
         // Read through its cell until its declaration binds the body
         // (`installed`): what a `:=` wrote before.
         ...c.deriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => ${RUNTIME.pyRead}(() => (${installed(d.name)} ? __follow(${d.name}) : __invoke(${cellRead(d.name)}))), ` +
+                `__brycomp_bind(__brycomp_proto, '${d.name}', () => ${RUNTIME.pyRead}(() => (${installed(d.name)} ? __brycomp_follow(${d.name}) : __brycomp_invoke(${cellRead(d.name)}))), ` +
                 `function (${NEXT_VALUE}) { ${derivedWrite(d)} }, () => ${cellRead(d.name)}, true, true);`
         )
     ];
@@ -2683,10 +2681,10 @@ function componentNamespace(c) {
     return [
         ``,
         ...namespaceObject(HOST, { name: c.namespace, replaced: c.store }),
-        ...(c.store ? [] : [`__fileLines(${JSON.stringify(c.source)}, ${JSON.stringify(c.lines)}, ${NS});`]),
+        ...(c.store ? [] : [`__brycomp_fileLines(${JSON.stringify(c.source)}, ${JSON.stringify(c.lines)}, ${NS});`]),
         ...(c.templateLine === undefined
             ? []
-            : [`__templateFrom(${JSON.stringify(c.source)}, ${c.templateLine}, ${JSON.stringify(c.unwritten)}, ${NS});`])
+            : [`__brycomp_templateFrom(${JSON.stringify(c.source)}, ${c.templateLine}, ${JSON.stringify(c.unwritten)}, ${NS});`])
     ];
 }
 
@@ -2701,7 +2699,7 @@ function injectedBindings(c) {
         ...markerBindings(c),
 
         // The adapters compiled template expressions call (`ADAPTERS`).
-        ...(c.store ? [] : Object.entries(ADAPTERS).map(([name, answer]) => `__bind(__proto, '${name}', () => ${answer});`)),
+        ...(c.store ? [] : Object.entries(ADAPTERS).map(([name, answer]) => `__brycomp_bind(__brycomp_proto, '${name}', () => ${answer});`)),
         // The second argument is what the component imported in its
         // `<script module>`, published so Python can read it.
         ...jsNameBindings(HOST, c, c.jsNames)
@@ -2724,11 +2722,11 @@ const storeWrite = (value) => `${RUNTIME.storeValue}(${value})`;
 const starredMembers = (c) =>
     c.store && c.starred && !c.listsAll
         ? [
-              `for (const __name of ${NS}.$bryntimeStarred.names) {` +
-                  ` if (__global.Object.hasOwn(${STORE_FACADE}, __name)) continue;` +
-                  ` __global.Object.defineProperty(${STORE_FACADE}, __name, { enumerable: true,` +
-                  ` get: () => ${storeRead(`${NS}[__name]`)},` +
-                  ` set: (${NEXT_VALUE}) => { ${NS}[__name] = ${storeWrite(NEXT_VALUE)}; } }); }`
+              `for (const __brycomp_name of ${NS}.$bryntimeStarred.names) {` +
+                  ` if (__brycomp_global.Object.hasOwn(${STORE_FACADE}, __brycomp_name)) continue;` +
+                  ` __brycomp_global.Object.defineProperty(${STORE_FACADE}, __brycomp_name, { enumerable: true,` +
+                  ` get: () => ${storeRead(`${NS}[__brycomp_name]`)},` +
+                  ` set: (${NEXT_VALUE}) => { ${NS}[__brycomp_name] = ${storeWrite(NEXT_VALUE)}; } }); }`
           ]
         : [];
 
@@ -2738,9 +2736,9 @@ function initCall(c) {
 
     return [
         ``,
-        `__init(${NS});`,
+        `__brycomp_init(${NS});`,
         ...unboundRefusals(HOST, c.unbound, c.listedAt),
-        ...(c.bindables.length ? [`__undeclared.clear();`] : []),
+        ...(c.bindables.length ? [`__brycomp_undeclared.clear();`] : []),
         ``
     ];
 }
@@ -2761,10 +2759,10 @@ function instanceExports(c) {
         // call for a template expression. The two wrappers differ in what they
         // are given because they differ in what the name means: an author's
         // `def` may sit under a decorator, so its value has to be read at the
-        // call, and an `__expr_N` is this compiler's own and never moves.
+        // call, and an `__brycomp_expr_N` is this compiler's own and never moves.
         //
         // What a template reads: a store has none, and hands its functions on
-        // through the namespace (`__store`, `__export_*`), so a wrapper of its
+        // through the namespace (`__brycomp_store`, `__brycomp_export_*`), so a wrapper of its
         // was made and never read.
         ...(c.store ? [] : c.funcs).map((f) =>
             componentWrapper(f) === RUNTIME.pyExpression
@@ -2777,10 +2775,10 @@ function instanceExports(c) {
         ),
         // Whether each template expression that calls nothing has read
         // JavaScript's own data, which nothing follows, and is read afresh at
-        // each render (`__pybridge.reading`, the markup's `unmemoized`): one
+        // each render (`__brycomp_pybridge.reading`, the markup's `unmemoized`): one
         // flag per expression, held from the start, one shape for the object
         // its reads look up at every render.
-        ...(c.rereads.length > 0 ? [`const __expr_reread = { ${c.rereads.map((m) => `${m}: false`).join(', ')} };`] : []),
+        ...(c.rereads.length > 0 ? [`const __brycomp_expr_reread = { ${c.rereads.map((m) => `${m}: false`).join(', ')} };`] : []),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
         // instance script exports into `$$exports` and hands that object back,
         // so a specifier list is enough: `export { focus }` becomes
@@ -2807,8 +2805,8 @@ function instanceExports(c) {
                       .filter((f) => f.exported)
                       .flatMap((f) => [
                           `let ${api(f.name)} = $state.raw();`,
-                          `${RUNTIME.liveExport}(${NS}, ${JSON.stringify(f.name)}, (__value) => { const __member = ` +
-                              `${RUNTIME.exportedMember}(__value); __untrack(() => { ${api(f.name)} = __member; }); });`
+                          `${RUNTIME.liveExport}(${NS}, ${JSON.stringify(f.name)}, (__brycomp_value) => { const __brycomp_member = ` +
+                              `${RUNTIME.exportedMember}(__brycomp_value); __brycomp_untrack(() => { ${api(f.name)} = __brycomp_member; }); });`
                       ]),
                   `export { ${c.funcs
                       .filter((f) => f.exported)
@@ -2829,7 +2827,7 @@ function instanceExports(c) {
                   //
                   // What a getter hands JavaScript is a crossing too, the other
                   // way, decided by the value the name holds when it is read and
-                  // not by what bound the name: `__storeMember` makes a float a
+                  // not by what bound the name: `__brycomp_storeMember` makes a float a
                   // number, keeps a container itself, and hands a Python
                   // callable over as a call of that callable, a `def` too.
                   //
@@ -2849,7 +2847,7 @@ function instanceExports(c) {
                   ...c.state.filter(c.published).map((n) => `    get ${n}() { return ${RUNTIME.storeShown}(${NS}, '${n}'); },`),
                   ...c.unsignalled.map((n) => `    get ${n}() { return ${storeRead(`${NS}.${n}`)}; },`),
                   // The parameter and the name its body reads are one constant.
-                  // `__pyArg`, because this setter is a **crossing**:
+                  // `__brycomp_pyArg`, because this setter is a **crossing**:
                   // `store.amount = 0.25` puts a Python float where Python
                   // expects one, as `store.set_amount(0.25)` does. The table of
                   // crossings in bridge.js lists this door and its getter.
@@ -2889,9 +2887,9 @@ function instanceExports(c) {
                   ...(storeExports(c).length
                       ? [
                             ``,
-                            ...storeExports(c).map((f) => `let __export_${f.name};`),
+                            ...storeExports(c).map((f) => `let __brycomp_export_${f.name};`),
                             `export { ${storeExports(c)
-                                .map((f) => `__export_${f.name} as ${f.name}`)
+                                .map((f) => `__brycomp_export_${f.name} as ${f.name}`)
                                 .join(', ')} };`
                         ]
                       : [])
@@ -2931,8 +2929,8 @@ function effectLines(c) {
         // logger's factory saw what was not yet there.
         ...c.inspects.map((i) =>
             i.logger
-                ? `$inspect(...__invoke(__invoke(${fn(i.name)})[0])).with((() => __event(__invoke(__invoke(${fn(i.name)})[1])))());`
-                : `$inspect(...__invoke(${fn(i.name)}));`
+                ? `$inspect(...__brycomp_invoke(__brycomp_invoke(${fn(i.name)})[0])).with((() => __brycomp_event(__brycomp_invoke(__brycomp_invoke(${fn(i.name)})[1])))());`
+                : `$inspect(...__brycomp_invoke(${fn(i.name)}));`
         ),
         // A root owns its own scope: it is not cleaned up when the component is,
         // which is the point: the destructor is handed to Python under the
@@ -2946,7 +2944,7 @@ function effectLines(c) {
                 ? `${destroyer(e.name)}.start(() => $effect.root(() => { $effect${e.pre ? '.pre' : ''}(() => {`
                 : `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
-            `    try { teardown = __invoke(${fn(e.name)}); }` +
+            `    try { teardown = __brycomp_invoke(${fn(e.name)}); }` +
                 ` catch (err) { throw ${RUNTIME.pyError}(err,${JSON.stringify(`${e.name}() — ${c.source}`)}); }`,
             // What an effect hands back is a *Python* value, so the question is
             // whether Python can call it, not whether JavaScript can. A bound
@@ -2955,9 +2953,9 @@ function effectLines(c) {
             // instance. `pyTeardown` answers the wide question and hands back
             // something JavaScript can call, receiver included, or nothing. An
             // `async def` hands back a coroutine, which it starts instead.
-            `    const __cleanup = ${RUNTIME.pyTeardown}(teardown, ${JSON.stringify(`${e.name}() — ${c.source}`)});`,
-            `    if (__cleanup) return () => { __cleanup(); };`,
-            e.root ? (holders(c) ? `}); __holders += 1; return __release; }));` : `}); }));`) : `});`
+            `    const __brycomp_cleanup = ${RUNTIME.pyTeardown}(teardown, ${JSON.stringify(`${e.name}() — ${c.source}`)});`,
+            `    if (__brycomp_cleanup) return () => { __brycomp_cleanup(); };`,
+            e.root ? (holders(c) ? `}); __brycomp_holders += 1; return __brycomp_release; }));` : `}); }));`) : `});`
         ]),
         // untrack, because a hook reads the component's names through the
         // namespace accessors, and those reads are signal reads. `mounts += 1`
@@ -2986,12 +2984,12 @@ function effectLines(c) {
         ...(c.lifecycle('on_mount')
             ? [
                   ``,
-                  `const __mounted = __untrack(() => ${c.hook('on_mount')});`,
+                  `const __brycomp_mounted = __brycomp_untrack(() => ${c.hook('on_mount')});`,
                   `$effect(() => {`,
-                  `    const __unmounted = __mounted === undefined ? undefined :` +
-                      ` ${RUNTIME.pyTeardown}(__untrack(() => ${RUNTIME.pyHook}(() => __mounted, ${JSON.stringify(`on_mount() — ${c.source}`)})()),` +
+                  `    const __brycomp_unmounted = __brycomp_mounted === undefined ? undefined :` +
+                      ` ${RUNTIME.pyTeardown}(__brycomp_untrack(() => ${RUNTIME.pyHook}(() => __brycomp_mounted, ${JSON.stringify(`on_mount() — ${c.source}`)})()),` +
                       ` ${JSON.stringify(`on_mount() — ${c.source}`)});`,
-                  `    if (__unmounted) return () => { __unmounted(); };`,
+                  `    if (__brycomp_unmounted) return () => { __brycomp_unmounted(); };`,
                   `});`
               ]
             : []),
@@ -3002,9 +3000,9 @@ function effectLines(c) {
         ...(c.lifecycle('on_destroy')
             ? [
                   ``,
-                  `const __teardown = __untrack(() => { const held = ${c.hook('on_destroy')};` +
+                  `const __brycomp_teardown = __brycomp_untrack(() => { const held = ${c.hook('on_destroy')};` +
                       ` return held === undefined ? undefined : ${RUNTIME.pyHook}(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}); });`,
-                  `if (__teardown !== undefined) __onDestroy(__teardown);`
+                  `if (__brycomp_teardown !== undefined) __brycomp_onDestroy(__brycomp_teardown);`
               ]
             : [])
     ];
@@ -3019,9 +3017,9 @@ function effectLines(c) {
 
 function plainPreamble(c) {
     return [
-        `import { init as __init } from ${JSON.stringify(c.body)};`,
+        `import { init as __brycomp_init } from ${JSON.stringify(c.body)};`,
         `import { ${runtimeAliases(HOST, [
-            'bind', '__pybridge', 'jsGlobal', 'pyCall', 'pyError', 'plainData', 'pyArg',
+            'bind', '__brycomp_pybridge', 'jsGlobal', 'pyCall', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'routeLoad', 'routeServerLoad', 'jsServerLoad', 'routeActions', 'jsCall', 'pyBind', 'NONE', 'helpers',
             'pythonModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/bridge';`,
@@ -3040,24 +3038,24 @@ function plainDeclarations(c) {
 
 function plainBindings(c) {
     return [
-        // No markup here, so none of what a template expression calls (`__event`,
-        // `__assign`, `__group`, `__truthy` and the rest) is emitted. Nothing
+        // No markup here, so none of what a template expression calls (`__brycomp_event`,
+        // `__brycomp_assign`, `__brycomp_group`, `__brycomp_truthy` and the rest) is emitted. Nothing
         // of `Object.prototype` is a name, as in `authorBindings`.
-        `const __proto = __global.Object.create(null);`,
-        ...c.state.map((n) => `__bind(__proto, '${n}', () => ${held(n)}, (${NEXT_VALUE}) => { ${held(n)} = ${NEXT_VALUE}; });`),
+        `const __brycomp_proto = __brycomp_global.Object.create(null);`,
+        ...c.state.map((n) => `__brycomp_bind(__brycomp_proto, '${n}', () => ${held(n)}, (${NEXT_VALUE}) => { ${held(n)} = ${NEXT_VALUE}; });`),
         ...c.funcs.map(
             (f) =>
-                `__bind(__proto, '${f.name}', () => ${fn(f.name)}, (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; }, () => ${fn(f.name)});`
+                `__brycomp_bind(__brycomp_proto, '${f.name}', () => ${fn(f.name)}, (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; }, () => ${fn(f.name)});`
         ),
         ...c.plainDeriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => __invoke(${fn(d.name)}), function (${NEXT_VALUE}) { ${derivedWrite(d, true)} }, () => ${fn(d.name)}, true, true);`
+                `__brycomp_bind(__brycomp_proto, '${d.name}', () => __brycomp_invoke(${fn(d.name)}), function (${NEXT_VALUE}) { ${derivedWrite(d, true)} }, () => ${fn(d.name)}, true, true);`
         ),
         // A class is bound as in a component (`authorBindings`), so the
         // namespace sees its statement add the name, as `globals()` does.
         ...declaredClasses(c).flatMap((n, at) => [
-            ...(at === 0 ? ['const __classes = __global.Object.create(null);'] : []),
-            `__bind(__proto, '${n}', () => __pybridge.declared(__classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __pybridge.declare(this, '${n}', ${NEXT_VALUE}, __classes); });`
+            ...(at === 0 ? ['const __brycomp_classes = __brycomp_global.Object.create(null);'] : []),
+            `__brycomp_bind(__brycomp_proto, '${n}', () => __brycomp_pybridge.declared(__brycomp_classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __brycomp_pybridge.declare(this, '${n}', ${NEXT_VALUE}, __brycomp_classes); });`
         ]),
         ...injections(c, false),
         ...markerBindings(c),
@@ -3093,8 +3091,8 @@ const liveExports = (c) =>
         ? storeExports(c)
               .map(
                   (f) =>
-                      `__liveExport(${NS}, ${JSON.stringify(f.name)}, (__value) => { __export_${f.name} = ` +
-                      `${storeRead('__value')}; });`
+                      `__brycomp_liveExport(${NS}, ${JSON.stringify(f.name)}, (__brycomp_value) => { __brycomp_export_${f.name} = ` +
+                      `${storeRead('__brycomp_value')}; });`
               )
         : [
               ...liveExportLines(HOST, { ...c, exported: c.exported.filter((n) => !(c.loaded && n === 'load') && !(c.acted && n === 'actions')) }),
@@ -3120,8 +3118,8 @@ function storeOrModuleLoad(c) {
         run: [
             // A module SvelteKit keeps out of the browser says so first: what it
             // defines cannot cross there by its name (`serverModule`).
-            ...(serverOnly(c.source) ? [`__pybridge.serverModule(${JSON.stringify(name)});`] : []),
-            `__init(${NS});`,
+            ...(serverOnly(c.source) ? [`__brycomp_pybridge.serverModule(${JSON.stringify(name)});`] : []),
+            `__brycomp_init(${NS});`,
             ...unboundRefusals(HOST, c.unbound, c.listedAt),
             ...starredMembers(c),
             ...liveExports(c),
@@ -3153,8 +3151,8 @@ const plainExports = (c) =>
     c.serverRoute && c.exported.includes('load') && c.jsImported.includes('load')
         ? [
               ...moduleExports(HOST, { ...c, exported: c.exported.filter((n) => n !== 'load') }),
-              `const __svelthon_load = ${RUNTIME.jsServerLoad}(() => ${jsLocal(HOST, 'load')});`,
-              'export { __svelthon_load as load };'
+              `const __brycomp_svelthon_load = ${RUNTIME.jsServerLoad}(() => ${jsLocal(HOST, 'load')});`,
+              'export { __brycomp_svelthon_load as load };'
           ]
         : moduleExports(HOST, c);
 
@@ -3572,62 +3570,12 @@ function compile(
         .flatMap((section) => section(c))
         .join('\n');
 
-    refuseBuilt(declared, script, source, lines, lineOffset);
-
     return {
         script,
         module,
         map,
         imports: imported
     };
-}
-
-// A name the compiler builds out of one of the author's, `__rev_value__` out of
-// `value__`, ends with `__` where the author's does, the spelling the prefix
-// rule leaves to Python's own names (`refuseLocked`): an author's name spelled
-// so was declared twice in the script, and Svelte refused the component in the
-// compiler's own code, `Identifier '__rev_value__' has already been declared`.
-// Asked of the script itself, so only a name it does declare twice is refused,
-// and at the line the author took it on. Only a name built out of another the
-// author took, `__word_` and that name, can be one; and only a declaration
-// counts, which the compiler writes at the start of its own line: the text of
-// a string, the address an import names, `"data:…function __doc__…"`, stands
-// inside one, and refused a module that declared the name once.
-//
-// An import binds a name too, the one after `as` or the one written: imported
-// from JavaScript as `__var_value__` beside a `value__`, it was declared twice
-// and no check saw it.
-const IMPORT_CLAUSE = /^import\s+([^'"]+?)\s+from\s+["']/gmu;
-
-const importBindings = (script) =>
-    [...script.matchAll(IMPORT_CLAUSE)].flatMap(([, clause]) =>
-        clause
-            .split(/[{},]/)
-            .map((one) => one.trim().split(/\s+as\s+/).at(-1))
-            .filter((one) => one !== '' && one !== '*')
-    );
-
-const declaredTimes = (script, name) =>
-    (script.match(new RegExp(`^(?:let|const|var|function|class)\\s+${name}(?![\\p{ID_Continue}$])`, 'gmu'))?.length ?? 0) +
-    importBindings(script).filter((one) => one === name).length;
-
-function refuseBuilt(declared, script, source, lines, lineOffset = 0) {
-    const builtOutOf = (name) => declared.find((other) => other !== name && name.startsWith('__') && name.endsWith(`_${other}`));
-    const taken = [...declared, ...importBindings(script)].find(
-        (name) => name.endsWith('__') && builtOutOf(name) !== undefined && declaredTimes(script, name) > 1
-    );
-    if (taken === undefined) return;
-
-    const out = builtOutOf(taken);
-    const at = lines?.get(taken);
-    const line = at === undefined ? undefined : at + lineOffset;
-
-    throw refuse(
-        `svelthon — \`${taken}\` is a name the compiler builds itself out of \`${out}\`, in the same scope ` +
-            `(${line === undefined ? source : `${source}:${line}`}), and the two would collide: choose another.`,
-        source,
-        line
-    );
 }
 
 const VIRTUAL_PREFIX = 'virtual:svelthon/';

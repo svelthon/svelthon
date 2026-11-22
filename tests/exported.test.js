@@ -38,13 +38,13 @@ describe('@export on a component function', () => {
     const script = (src) => compile(src, 'Probe', 'src/Probe.svelte').script;
 
     test('emits the export Svelte reads', () => {
-        expect(script('@export\ndef focus():\n    pass\n')).toContain('export { __api_focus as focus };');
+        expect(script('@export\ndef focus():\n    pass\n')).toContain('export { __brycomp_api_focus as focus };');
     });
 
     test('and only for the functions that carry it', () => {
         const out = script('@export\ndef shown():\n    pass\n\n\ndef hidden():\n    pass\n');
 
-        expect(out).toContain('export { __api_shown as shown };');
+        expect(out).toContain('export { __brycomp_api_shown as shown };');
         expect(out).not.toContain('hidden };');
     });
 
@@ -130,7 +130,7 @@ describe('the call form', () => {
             'src/Probe.svelte'
         ).script;
 
-        expect(out).toContain('export { __api_a as a, __api_b as b };');
+        expect(out).toContain('export { __brycomp_api_a as a, __brycomp_api_b as b };');
     });
 });
 
