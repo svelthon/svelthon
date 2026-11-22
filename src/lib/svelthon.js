@@ -1726,14 +1726,11 @@ const KIT_SERVER = '$app/server';
 const REMOTE_SERVER = '\0svelthon-remote-server?';
 
 // Whether Node finds the Bryntime this plugin compiles with by its name from a
-// directory, as it will from a server built there. Node 22.14 and 23.2 tell
-// it (`findPackageJSON`); before them a server asks for it by its name.
+// directory, as it will from a server built there, as Node 22.14 and 23.2 tell
+// it (`findPackageJSON`).
 const runtimeNamedFrom = (root) => {
-    const find = nodeModule.findPackageJSON;
-
-    if (find === undefined) return true;
     try {
-        return realpathSync(find('bryntime', pathToFileURL(resolve(root, 'package.json')))) === realpathSync(find('bryntime', import.meta.url));
+        return realpathSync(nodeModule.findPackageJSON('bryntime', pathToFileURL(resolve(root, 'package.json')))) === realpathSync(nodeModule.findPackageJSON('bryntime', import.meta.url));
     } catch {
         return false;
     }
@@ -2525,11 +2522,16 @@ export function svelthon(options = {}) {
             // Svelthon elsewhere (`svelthon/bryntime`), which Node finds from
             // the application and Bryntime from it. Asked by its name, a
             // Bryntime installed under Svelthon alone was found from nowhere,
-            // built in beside the plugin's, and refused as a second copy.
+            // built in beside the plugin's, and refused as a second copy. On a
+            // Node before 22.14, whether Vite finds it from the application at
+            // all: taken for found, it was not found there either.
             if (specifier === 'bryntime' && building && options?.ssr) {
-                runtimeNamed ??= runtimeNamedFrom(routes);
+                runtimeNamed ??=
+                    nodeModule.findPackageJSON === undefined
+                        ? this.resolve(specifier, resolve(routes, 'package.json'), { skipSelf: true }).then((found) => found !== null)
+                        : runtimeNamedFrom(routes);
 
-                return { id: runtimeNamed ? specifier : 'svelthon/bryntime', external: true };
+                return Promise.resolve(runtimeNamed).then((named) => ({ id: named ? specifier : 'svelthon/bryntime', external: true }));
             }
 
             if (specifier === KIT_TRANSPORT) {
