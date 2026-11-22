@@ -464,6 +464,10 @@ function uncommented(text) {
     return out;
 }
 
+// What may stand between two string literals Python joins, and what opens one.
+const BLANK = /\s+|\\\r?\n/y;
+const LEAD = /[rRbBuUfFtT]{0,2}(?=['"])/y;
+
 export function walrus(expression) {
     let out = '';
     let index = 0;
@@ -473,8 +477,38 @@ export function walrus(expression) {
         const skip = atomic(expression, index, (from, to) => fields.push([from, to]));
 
         if (skip > 0) {
-            out += walrusFields(expression, index, index + skip, fields);
+            // With its prefix, already written, `t"…"`: a t-string is handed
+            // over whole (`walrusFields`), and so are the literals written next
+            // to it, `t"a {x}" t"b"`, one string to Python.
+            const prefix = /(?<![\p{L}\p{N}_])[rRbBuUfFtT]{1,2}$/u.exec(out)?.[0] ?? '';
+            const comment = expression[index] === '#';
+            const run = [[index - prefix.length, index + skip, fields]];
+
             index += skip;
+
+            while (!comment) {
+                let gap = index;
+
+                for (;;) {
+                    BLANK.lastIndex = gap;
+                    if (BLANK.test(expression)) gap = BLANK.lastIndex;
+                    else if (expression[gap] === '#') gap += atomic(expression, gap);
+                    else break;
+                }
+
+                LEAD.lastIndex = gap;
+                const lead = LEAD.exec(expression)?.[0];
+
+                if (lead === undefined) break;
+
+                const more = [];
+                const length = atomic(expression, gap + lead.length, (from, to) => more.push([from, to]));
+
+                run.push([gap, gap + lead.length + length, more]);
+                index = gap + lead.length + length;
+            }
+
+            out = out.slice(0, out.length - prefix.length) + walrusFields(expression, run);
             continue;
         }
 
@@ -584,27 +618,79 @@ export function walrus(expression) {
 // them is kept. A field ending in `=` prints its own text, `(count := 1)=1`, so
 // that text becomes a string field of its own, and the value follows with the
 // `!r` the `=` implies when the field gives no conversion and no specification.
-function walrusFields(source, from, to, fields) {
+//
+// A t-string keeps the text it was written with in its `Template`, the
+// expression of each of its own fields and a debug field's label: written so,
+// its `.expression` showed `__brycomp_assign("count", …)`, and a label a field
+// of its own, an interpolation CPython has not. Handed to the runtime's
+// `templateText` as written (`__brycomp_tstring`), as Brycomp hands one whose
+// dot it rewrote, the `=` the `!r` it stands for. Every debug field of it, one
+// left as written too: the label is handed over once, and not kept in the text
+// as well. Literals written next to each other, `t"a {x}" t"b"`, are one
+// string to Python and handed over in one call.
+function walrusFields(source, run) {
+    const template = run.some(([from, to]) => /t/i.test(/^[A-Za-z]*/.exec(source.slice(from, to))[0]));
+    const fields = run.flatMap(([from, , found]) => {
+        const own = template ? ownFields(source, from, found) : new Set();
+
+        return found.map(([start, end]) => {
+            const field = source.slice(start, end);
+            const conversion = field.match(CONVERSION)?.[0] ?? '';
+            const text = field.slice(0, field.length - conversion.length);
+            const debug = text.match(/(?<![=!<>])=\s*$/);
+            const expression = debug ? text.slice(0, debug.index) : field;
+
+            return { start, end, conversion, text, debug, expression, written: walrus(expression), mine: own.has(start) };
+        });
+    });
+    const handed = template && fields.some((one) => one.written !== one.expression);
+    const expressions = [];
+    const labels = [];
     let out = '';
-    let at = from;
+    let at = run[0][0];
 
-    for (const [start, end] of fields) {
-        const field = source.slice(start, end);
-        const conversion = field.match(CONVERSION)?.[0] ?? '';
-        const text = field.slice(0, field.length - conversion.length);
-        const debug = text.match(/(?<![=!<>])=\s*$/);
-        const expression = debug ? text.slice(0, debug.index) : field;
-        const written = walrus(expression);
+    for (const { start, end, conversion, text, debug, expression, written, mine } of fields) {
+        if (mine) {
+            expressions.push(debug ? expression : text);
+            labels.push(debug ? text : '');
+        }
+        if (written === expression && !(handed && mine && debug)) continue;
 
-        if (written === expression) continue;
-
-        out += debug
-            ? `${source.slice(at, start - 1)}{${JSON.stringify(text)}}{${written}${conversion || (source[end] === ':' ? '' : '!r')}`
-            : source.slice(at, start) + written;
+        out += !debug
+            ? source.slice(at, start) + written
+            : mine
+              ? `${source.slice(at, start)}${written}${conversion || (source[end] === ':' ? '' : '!r')}`
+              : `${source.slice(at, start - 1)}{${JSON.stringify(text)}}{${written}${conversion || (source[end] === ':' ? '' : '!r')}`;
         at = end;
     }
 
-    return out + source.slice(at, to);
+    const literal = out + source.slice(at, run.at(-1)[1]);
+
+    return handed ? `__brycomp_tstring(${literal}, ${JSON.stringify(expressions)}, ${JSON.stringify(labels)})` : literal;
+}
+
+// The fields of a t-string's own braces, by where each starts, and not those of
+// a format specification inside one, `{x:{width}}`: the literal's braces
+// counted between the fields, a doubled one at the top a brace of text.
+function ownFields(source, from, fields) {
+    const own = new Set();
+    let depth = 0;
+    let at = from;
+
+    for (const [start, end] of fields) {
+        for (; at < start; at++) {
+            const char = source[at];
+
+            if ((char === '{' || char === '}') && depth === 0 && source[at + 1] === char) at++;
+            else if (char === '{') depth++;
+            else if (char === '}') depth--;
+        }
+
+        if (depth === 1) own.add(start);
+        at = end;
+    }
+
+    return own;
 }
 
 // The markup of a component, and nothing else: Python is full of braces (dict
