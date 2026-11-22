@@ -1983,14 +1983,7 @@ Loading is the other price: 290 KB gzip, the Brython runtime included, and
 **0.12 s to the demo's content** in production with a cold cache. Paid once per
 session, not per page, since the app never reloads.
 
-## Not done yet
-
-**Blocks a real application**
-
-- **Publishing.** The package is defined, its `exports` and its `files`, and it
-  is not on npm yet, so the `npm install svelthon` of the quick start waits for
-  it.
-
+## Further reading
 
 **Design notes**: [notes/architecture.md](notes/architecture.md) on the five
 layers under a component and what each one does,

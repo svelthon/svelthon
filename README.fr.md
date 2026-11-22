@@ -2059,14 +2059,7 @@ L'autre prix est au chargement : 290 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.
 
-## Reste à faire
-
-**Bloque une vraie application**
-
-- **Publication.** Le paquet est défini, ses `exports` et ses `files`, et il
-  n'est pas encore sur npm : le `npm install svelthon` du démarrage rapide
-  l'attend.
-
+## Pour aller plus loin
 
 **Notes de conception** : [notes/architecture.md](notes/architecture.md) sur
 les cinq couches sous un composant et ce que fait chacune,
