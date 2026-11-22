@@ -1,5 +1,5 @@
-# A store's name only `globals()` binds, and a name nothing ever binds.
-globals()["future"] = 1
+# A store's name a function writes, and a name nothing ever binds.
+future = 1
 
 
 @derived
@@ -12,7 +12,8 @@ def read():
 
 
 def write(value):
-    globals()["future"] = value
+    global future
+    future = value
 
 
 def absent():

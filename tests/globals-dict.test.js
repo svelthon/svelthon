@@ -6,27 +6,20 @@ import * as ordered from './fixtures/globals_order.py';
 import * as orderedStore from './fixtures/globals_order_store.svelte.py';
 import * as walked from './fixtures/globals_walked.py';
 
-// `globals()` is the module's own dict, as CPython hands it over: its class,
-// its keys, a write that makes a global and a deletion that removes one. The
-// expected strings are what CPython answers for the same file, step by step,
-// each step after `restore()`. Its names are the module's: no word the
-// compiler adds is one of them.
+// `globals()` is the module's own dict, as CPython hands it over: its class and
+// its keys, read (`namespace-read-only.test.js` for a write). The expected
+// strings are what CPython answers for the same file, step by step, each step
+// after `restore()`. Its names are the module's: no word the compiler adds is
+// one of them.
 beforeEach(() => module.restore());
 
 test.each([
     ['kind', 'dict|True|True'],
-    [
-        'names',
-        'added_value,count,deleted,kind,label,names,popped,popped_read,reads,restore,top,top_dir,top_locals,unbound,writes'
-    ],
+    ['names', 'count,kind,label,names,reads,restore,top,top_dir,top_locals,unbound'],
     ['reads', 'True|True|True|3|3|3|x|True'],
-    ['writes', '5'],
-    ['popped', 'x|False'],
-    ['deleted', 'False'],
     ['top', 'True|True|True|False'],
-    // A name never bound, and one popped from globals(), read from a function.
-    ['unbound', 'missing'],
-    ['popped_read', 'missing']
+    // A name never bound, read from a function.
+    ['unbound', 'missing']
 ])('globals() answers %s as CPython does', (step, cpython) => {
     expect(module[step]()).toBe(cpython);
 });
@@ -34,42 +27,36 @@ test.each([
 // The order the names were bound in, which the accessors of a module are not
 // in: the compiler declares its values, then its functions, and a class has
 // none, written on the namespace itself. Read forwards, backwards and copied;
-// then with a value and a class popped and put back, which go last, and with a
-// name written again, which keeps its place. `python3` on the same file.
+// then with a name bound again, which keeps its place. `python3` on the same
+// file.
 test.each([
     ['a module', ordered],
     ['a reactive module', orderedStore]
 ])('globals() lists the names of %s in the order they were bound', (_, one) => {
     // A reactive module hands its Python list over itself.
     const rows = (lists) => Array.from(lists, (row) => Array.from(row));
-    const moved = [
-        ['middle', 'last', 'first', 'Middle'],
-        ['Middle', 'first', 'last', 'middle'],
-        ['middle', 'last', 'first', 'Middle']
-    ];
-
-    expect(rows(one.listed())).toEqual([
+    const bound = [
         ['first', 'middle', 'Middle', 'last'],
         ['last', 'Middle', 'middle', 'first'],
         ['first', 'middle', 'Middle', 'last']
-    ]);
-    expect(rows(one.moved())).toEqual(moved);
-    expect(rows(one.replaced())).toEqual(moved);
+    ];
+
+    expect(rows(one.listed())).toEqual(bound);
+    expect(rows(one.replaced())).toEqual(bound);
 });
 
 // A name bound or deleted while `globals()` is walked changes its size, and
-// the walk raises: a variable, a class and a function bound by `global`, a key
-// written into `globals()`, a `del`, and a class and a variable bound at the
-// top of the module, whose class had no accessor and was seen by no one. A
-// name bound again does not. Counted as the namespace is written, so a walk
-// costs what it did. `python3` on the same file.
+// the walk raises: a variable, a class and a function bound by `global`, a
+// `del`, and a class and a variable bound at the top of the module, whose class
+// had no accessor and was seen by no one. A name bound again does not. Counted
+// as the namespace is written, so a walk costs what it did. `python3` on the
+// same file.
 test('a name bound or deleted while globals() is walked ends the walk as in CPython', () => {
     expect([...walked.seen]).toEqual([
         'variable RuntimeError',
         'class RuntimeError',
         'function RuntimeError',
         'existing ok',
-        'item RuntimeError',
         'delete RuntimeError',
         'top class RuntimeError',
         'top variable RuntimeError'

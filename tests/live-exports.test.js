@@ -81,18 +81,15 @@ test('a store’s named export follows the name as its default export does', () 
     expect(seen).toEqual(['function 7', '42', '42', 'undefined', 'undefined', 'function 7']);
 });
 
-// And a write from Python to such a name, through `globals()` or from another
-// module, was taken by Python's reader and missed by JavaScript's, the export
-// staying at the source's value. JavaScript refuses an assignment to an import,
-// and so does the namespace now, with the name and the module, and the two
-// readers keep one value.
-test.for([
-    ['through globals()', () => Reexport.overwrite()],
-    ['from another module', () => writeReexport()]
-])('a write %s to a re-exported JavaScript name is refused', ([, write]) => {
+// And a write from Python to such a name from another module was taken by
+// Python's reader and missed by JavaScript's, the export staying at the
+// source's value. JavaScript refuses an assignment to an import, and so does
+// the namespace now, with the name and the module, and the two readers keep
+// one value. Its own namespace takes no write (`namespace-read-only.test.js`).
+test('a write from another module to a re-exported JavaScript name is refused', () => {
     Source.reset();
 
-    expect(write).toThrow(/'counter' is a JavaScript import of .*js_reexport\.py, and an import is read-only/);
+    expect(() => writeReexport()).toThrow(/'counter' is a JavaScript import of .*js_reexport\.py, and an import is read-only/);
     expect(Reexport.counter).toBe(0);
     expect(Reexport.read()).toBe(0);
 });

@@ -48,16 +48,10 @@ def delete_name():
         del doomed
 
 
-def bind_item():
-    for name in globals():
-        globals()["fresh_item"] = 1
-
-
 attempt("variable", bind_variable)
 attempt("class", bind_class)
 attempt("function", bind_function)
 attempt("existing", bind_existing)
-attempt("item", bind_item)
 attempt("delete", delete_name)
 
 walker = None

@@ -26,7 +26,7 @@ def given(value):
     return lambda fn: fn
 
 
-@given(globals().__setitem__("written", 99))
+@given((written := 99))
 @derived
 def written():
     return base * 4

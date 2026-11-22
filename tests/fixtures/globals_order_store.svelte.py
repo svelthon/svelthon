@@ -1,5 +1,5 @@
 # The order globals() lists a reactive module's names in, as `globals_order.py`.
-__all__ = ["listed", "moved", "replaced"]
+__all__ = ["listed", "replaced"]
 first = 1
 
 
@@ -20,13 +20,7 @@ def listed():
     return [[name for name in view if name in ("first", "middle", "Middle", "last")] for view in views]
 
 
-def moved():
-    mapping = globals()
-    mapping["first"] = mapping.pop("first")
-    mapping["Middle"] = mapping.pop("Middle")
-    return listed()
-
-
 def replaced():
-    globals()["middle"] = 17
+    global middle
+    middle = 17
     return listed()

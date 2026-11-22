@@ -129,6 +129,84 @@ function refuseTemplateWalrus(ast, table, source, ranges) {
     }
 }
 
+// A module's namespace is read and never written through its doors, as the
+// bridge makes them at run time (`host.readOnlyNamespace`): what each name is,
+// a cell, a key of a store, a prop, is decided from the text, and a write
+// through `globals()`, `vars()` or `locals()` at the module's level, a
+// function's `__globals__`, a frame's `f_globals` or `builtins.globals()` binds
+// or removes a name the text does not show. Refused at its line, a key written
+// or deleted and a
+// method that writes; a read, `[k]`, `get`, `in`, a walk, and a door handed to a
+// function, which can only read it, stay.
+const NAMESPACE_WRITES = new Set(['pop', 'popitem', 'update', 'setdefault', 'clear', '__setitem__', '__delitem__']);
+
+function refuseNamespaceWrites(tree, source, ranges, lineOffset) {
+    const ast = $B.ast;
+    const scopes = [ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
+    const literal = (node) => (node instanceof ast.Constant && typeof node.value === 'string' ? node.value : null);
+    const door = (node, top) => {
+        if (node instanceof ast.Call && node.args.length === 0 && node.keywords.length === 0) {
+            const { func } = node;
+
+            if (func instanceof ast.Name && (func.id === 'globals' || (top && (func.id === 'vars' || func.id === 'locals')))) return `${func.id}()`;
+            if (func instanceof ast.Attribute && func.attr === 'globals' && func.value instanceof ast.Name && func.value.id === 'builtins') return 'builtins.globals()';
+        }
+
+        return node instanceof ast.Attribute && (node.attr === '__globals__' || node.attr === 'f_globals') ? `….${node.attr}` : null;
+    };
+    // `door.update(…)`, or as the markup spells it, `__brycomp_getattr(door, "update")(…)`.
+    const method = (node, top) => {
+        if (!(node instanceof ast.Call)) return null;
+
+        const { func } = node;
+        const [opened, name] =
+            func instanceof ast.Attribute
+                ? [func.value, func.attr]
+                : func instanceof ast.Call && func.func instanceof ast.Name && func.func.id === RUNTIME.readAttr && func.args.length === 2
+                  ? [func.args[0], literal(func.args[1])]
+                  : [null, null];
+        const found = NAMESPACE_WRITES.has(name) ? door(opened, top) : null;
+
+        return found === null ? null : `${found}.${name}(…)`;
+    };
+    // The line of the script, or of the markup an expression was written at.
+    const at = (node, template) => {
+        if (!template) return [node.lineno + lineOffset, undefined];
+
+        const range = ranges.find(([from, to]) => node.lineno >= from && node.lineno <= to);
+
+        return range === undefined ? [undefined, undefined] : [range[2], range[3]];
+    };
+    const visit = (node, top, template) => {
+        if (Array.isArray(node)) return node.forEach((one) => visit(one, top, template));
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+
+        const written = node instanceof ast.Subscript && !(node.ctx instanceof ast.Load) ? door(node.value, top) : null;
+        const spelling = written === null ? method(node, top) : node.ctx instanceof ast.Del ? `del ${written}[…]` : `${written}[…] = …`;
+
+        if (spelling !== null) {
+            const [line, column] = at(node, template);
+            const where = line === undefined ? '' : ` (${source}:${line}${column === undefined ? '' : `:${column + 1}`})`;
+
+            throw refuse(
+                `svelthon — \`${spelling}\` writes the module's namespace, which its doors read and never write${where}: ` +
+                    `a name is bound by assigning it in the module's text, \`name = …\`, and names made by ` +
+                    `computation are the keys of a dict of your own.`,
+                source,
+                line,
+                column
+            );
+        }
+
+        const inner = scopes.some((kind) => node instanceof kind);
+        const expression = node instanceof ast.FunctionDef && node.name.startsWith(EXPR_PREFIX);
+
+        for (const field of node.constructor._fields) visit(node[field], top && !inner, template || expression);
+    };
+
+    visit(tree.body, true, false);
+}
+
 
 // The props the component writes besides the default its annotation declares
 // (`annotatedAt`), or changes a part of, wherever it does: Svelte's question
@@ -137,11 +215,10 @@ function refuseTemplateWalrus(ast, table, source, ranges) {
 // writes. Read off the tree, each name where Python resolves it: a write the
 // module makes, or a function that declares the name `global`, a part
 // written, `ticket.x = 1` or `ticket[0] = 1`, and the markup's `:=`, which
-// writes through `__brycomp_assign`. And through the module's namespace: a key written
-// `globals()["ticket"] = 1` is that prop, and a namespace handed on, updated or
-// written at a key no text says, any of them.
+// writes through `__brycomp_assign`. The module's namespace writes nothing
+// (`refuseNamespaceWrites`), but a part of what it reads at a key may be
+// written, `globals()["ticket"]["label"] = 1`, a part of that prop.
 const NAMESPACE_READS = new Set(['get', 'keys', 'values', 'items', 'copy', '__contains__', '__getitem__']);
-const NAMESPACE_DOORS = ['globals', '__globals__', 'f_globals'];
 
 function writtenProps(table, body, props, annotatedAt) {
     const written = new Set();
@@ -187,17 +264,9 @@ function writtenProps(table, body, props, annotatedAt) {
         const stored = node.ctx !== undefined && !(node.ctx instanceof ast.Load);
         const { name, through } = stored ? (node instanceof ast.Name ? { name: node.id, through: false } : rootOf(node)) : { name: null, through: false };
 
-        if (node instanceof ast.Subscript && namespace(node.value)) {
-            const key = node.slice instanceof ast.Constant && typeof node.slice.value === 'string' ? node.slice.value : null;
-
-            if (stored && key === null) all();
-            else if (stored && wanted.has(key)) written.add(key);
-            return visit(node.slice, inner);
-        }
-        if (node instanceof ast.Attribute && namespace(node.value)) {
-            if (!NAMESPACE_READS.has(node.attr)) all();
-            return;
-        }
+        // What the namespace reads at a key, or a method it reads, writes no prop.
+        if (node instanceof ast.Subscript && namespace(node.value)) return visit(node.slice, inner);
+        if (node instanceof ast.Attribute && namespace(node.value)) return;
 
         // A name a statement binds by its text, not by a target: `def`,
         // `class`, `import … as`, `except … as`, which deletes it as it ends,
@@ -217,25 +286,8 @@ function writtenProps(table, body, props, annotatedAt) {
         if (boundByText === '*') all();
         else if (wanted.has(boundByText) && (block === table.top || isGlobalScope(scopeIn(block, boundByText)))) written.add(boundByText);
 
-        // And the namespace reached through another door than `globals()`,
-        // any of them in doubt: `vars()` and `locals()`, which are `globals()`
-        // at the module's level alone (in a function or a class, they are its
-        // own names, which hold no prop), the function itself handed on, a
-        // function's `__globals__`, a frame's `f_globals`, and an attribute
-        // `getattr` reads by a name the text does not say.
-        if (node instanceof ast.Call && node.func instanceof ast.Name && ['vars', 'locals'].includes(node.func.id)) {
-            if (node.args.length === 0 && block === table.top) all();
-            return visit(node.args, inner);
-        }
-        if (node instanceof ast.Name && node.ctx instanceof ast.Load && ['globals', 'vars', 'locals'].includes(node.id)) all();
-        if (node instanceof ast.Attribute && NAMESPACE_DOORS.includes(node.attr)) all();
-        if (node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === 'getattr' && node.args.length > 1) {
-            const attribute = literal(node.args[1]);
-
-            if (attribute === null || NAMESPACE_DOORS.includes(attribute)) all();
-        }
-
-        if (namespace(node)) all();
+        // A part written at a key no text says, `globals()[key]["label"] = …`,
+        // may be any prop's.
         if (through && name === null) all();
 
         if (wanted.has(name) && (through || block === table.top || isGlobalScope(scopeIn(block, name)))) written.add(name);
@@ -308,8 +360,7 @@ function broughtByStars(body, starNames) {
 // its `__all__`, as its own level writes it, statement after statement, a list
 // or a tuple of strings assigned, added with `+=` or by `append` and `extend`;
 // or else every name its own level binds, a name deleted no longer, and what
-// its own star imports bring (`starNames`), and what it writes at a key of
-// `globals()`, that does not begin with `_`. Null
+// its own star imports bring (`starNames`), that does not begin with `_`. Null
 // when that is not told without running it: an `__all__` computed, or written
 // or read anywhere else, a name deleted in a block, the names `__js__` binds,
 // a star import not known, or text that does not parse.
@@ -383,17 +434,6 @@ function publishedNames(text, starNames = () => null) {
 
             if (starred) return null;
             for (const one of bound) names.add(one);
-
-            // And the keys its own level writes in `globals()`,
-            // `globals()["GET"] = read` or `globals().update(POST=save)`: a
-            // route that took them by a star answered 405. A function's body
-            // does not run as it is imported.
-            if (node instanceof ast.FunctionDef || node instanceof ast.AsyncFunctionDef || node instanceof ast.ClassDef) continue;
-
-            const keys = namespaceKeys([node]);
-
-            if (keys.any) return null;
-            for (const one of keys.written) if (keys.removed.has(one)) names.delete(one); else names.add(one);
         }
     }
 
@@ -426,61 +466,28 @@ function unboundReads(table, taken, body) {
 
 const IDENTIFIER = /^[\p{ID_Start}_][\p{ID_Continue}]*$/u;
 
-// The keys a module reads and writes through `globals()` where its text names
-// them: `globals()["x"]`, `globals().get("x")` and `"x" in globals()` read it,
-// any other spelling at a key writes it, `update` the keys of the dict written
-// out or of its keywords. And whether it may write at a key no text names
-// (`any`): a key computed, a dict handed to `update`, the namespace handed on.
-// A method the template reads off it is `__brycomp_getattr(globals(), "get")`, its dot
-// rewritten (`templateDots`), which was taken for nothing. A key deleted,
-// `del globals()["x"]` or `pop("x")`, is `removed` too.
+// The keys a module reads through `globals()` where its text names them,
+// `globals()["x"]`, `globals().get("x")` and `"x" in globals()`, which it
+// writes nothing through (`refuseNamespaceWrites`). A method the template
+// reads off it is `__brycomp_getattr(globals(), "get")`, its dot rewritten
+// (`templateDots`).
 function namespaceKeys(body) {
     const ast = $B.ast;
     const read = new Set();
-    const written = new Set();
-    const removed = new Set();
-    const placed = new Set();
-    let any = false;
     const namespace = (node) => node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === 'globals' && node.args.length === 0;
     const literal = (node) => (node instanceof ast.Constant && typeof node.value === 'string' ? node.value : null);
     const owner = (func) => (func instanceof ast.Attribute ? func.value : func instanceof ast.Call && func.func instanceof ast.Name && func.func.id === RUNTIME.readAttr ? func.args[0] : null);
     const method = (func) => (func instanceof ast.Attribute ? func.attr : literal(func.args[1]));
-    const write = (key, gone = false) => {
-        if (key === null) any = true;
-        else written.add(key);
-        if (key !== null && gone) removed.add(key);
-    };
     const visit = (node) => {
         if (Array.isArray(node)) return node.forEach(visit);
         if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
 
         if (node instanceof ast.Subscript && namespace(node.value)) {
-            placed.add(node.value);
-            if (node.ctx instanceof ast.Load) {
-                if (literal(node.slice) !== null) read.add(literal(node.slice));
-            } else {
-                write(literal(node.slice), node.ctx instanceof ast.Del);
-            }
-        } else if (node instanceof ast.Call && namespace(owner(node.func))) {
-            const name = method(node.func);
-
-            placed.add(owner(node.func));
-            if (NAMESPACE_READS.has(name)) {
-                if (literal(node.args[0]) !== null) read.add(literal(node.args[0]));
-            } else if (name === 'update') {
-                const [dict] = node.args;
-
-                if (dict !== undefined && !(dict instanceof ast.Dict)) any = true;
-                for (const key of dict?.keys ?? []) write(key === null ? null : literal(key));
-                for (const keyword of node.keywords) write(keyword.arg ?? null);
-            } else {
-                write(literal(node.args[0]) ?? null, name === 'pop' || name === '__delitem__');
-            }
+            if (literal(node.slice) !== null) read.add(literal(node.slice));
+        } else if (node instanceof ast.Call && namespace(owner(node.func)) && NAMESPACE_READS.has(method(node.func))) {
+            if (literal(node.args[0]) !== null) read.add(literal(node.args[0]));
         } else if (node instanceof ast.Compare && literal(node.left) !== null && node.comparators.some(namespace)) {
-            node.comparators.filter(namespace).forEach((one) => placed.add(one));
             read.add(literal(node.left));
-        } else if (namespace(node) && !placed.has(node)) {
-            any = true;
         }
 
         for (const field of node.constructor._fields) visit(node[field]);
@@ -488,67 +495,7 @@ function namespaceKeys(body) {
 
     visit(body);
 
-    return { read, written, removed, any };
-}
-
-// The names a body reads, wherever.
-function loadedNames(body) {
-    const ast = $B.ast;
-    const names = new Set();
-    const visit = (node) => {
-        if (Array.isArray(node)) return node.forEach(visit);
-        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
-        if (node instanceof ast.Name && node.ctx instanceof ast.Load) names.add(node.id);
-        for (const field of node.constructor._fields) visit(node[field]);
-    };
-
-    visit(body);
-
-    return names;
-}
-
-// Builtins no statement may bind, which a dict may still hold as keys.
-const UNASSIGNABLE = new Set(['True', 'False', 'None', '__debug__']);
-
-// The builtins a module writes at their key, `globals()["len"] = …`, which it
-// then binds too (`compile`), past its last line, where no line moves:
-// Brython reads the builtin itself where the module never binds the name, and
-// the module's own stood for nothing, the page and the script's functions
-// kept the builtin. Bound, an absent name is the builtin again, as in Python.
-// Every builtin it reads where it may write at a key no text names, and none
-// no statement may bind: `True = None` refused the module. Nor one the module
-// imports from JavaScript, which is no builtin there, and which Brycomp refuses
-// to see bound: `importjs { round }` beside `len(globals())` compiled no more.
-// Nor one its script binds, which needs no binding. Nor one JavaScript
-// reserves, `eval`, a parameter's name or a key read: bound, it refused the
-// module.
-function writtenBuiltins(src, defs, where, jsNames) {
-    if (![src, ...defs].some((text) => text.includes('globals'))) return [];
-
-    const parsed = (text) => {
-        try {
-            return $B._PyPegen.run_parser(new $B.Parser($B.unindent(text), where, 'file')).body;
-        } catch {
-            return [];
-        }
-    };
-    const script = readScript(src, where, jsNames);
-    const bound = script === null ? new Set() : moduleBinds(symbolTable(script.tree, where));
-    const bodies = [script?.tree.body ?? [], ...defs.map(parsed)];
-    const keys = bodies.map(namespaceKeys);
-    const read = keys.some((one) => one.any) ? bodies.flatMap((body) => [...loadedNames(body)]) : [];
-
-    return [...new Set([...keys.flatMap((one) => [...one.written]), ...read])].filter(
-        (name) =>
-            IDENTIFIER.test(name) &&
-            Object.hasOwn($B.builtins, name) &&
-            !UNASSIGNABLE.has(name) &&
-            !/^__.*__$/.test(name) &&
-            !script?.theirs.has(name) &&
-            !jsNames.includes(name) &&
-            !bound.has(name) &&
-            !JS_RESERVED.has(name)
-    );
+    return { read };
 }
 
 // `x => expr`, the derived, written the way the state beside it is written.
@@ -3249,14 +3196,6 @@ function compile(
 
     refuseGeneratedSpelling(src, source, lineOffset);
 
-    // The builtins the module writes at their key, bound by it too
-    // (`writtenBuiltins`): after the template's functions, which hold no line
-    // of the file, or after a module's last line.
-    const shadowed = writtenBuiltins(src, defs, source, jsNames);
-    const binding = shadowed.length > 0 ? `if False:\n${shadowed.map((one) => `    ${one} = None`).join('\n')}` : null;
-
-    if (binding !== null && !component) src = `${src}\n${binding}\n`;
-
     // The common half, Brycomp's: a component's script joined with its template's
     // functions, a `.py` taken as it is, `importjs` lifted, Svelthon's signs
     // made Python (`HOST.rewrite`), the translation, and the imports the
@@ -3271,7 +3210,7 @@ function compile(
         source,
         component,
         named: component ? null : pythonModuleName(source),
-        defs: [...defs.map((def) => templateDots(HOST, def)), ...(binding !== null && component ? [binding] : [])],
+        defs: defs.map((def) => templateDots(HOST, def)),
         defLines,
         defColumns,
         defTexts,
@@ -3285,19 +3224,17 @@ function compile(
     ({ src } = compiled);
 
     if (component) refuseTemplateWalrus(root._ast, table, source, exprLines);
+    refuseNamespaceWrites(root._ast, source, exprLines, lineOffset);
 
     const foreign = foreignNames([...jsImported, ...jsNames]);
 
     let { props, bindables, defaulted, literals, ambiguous, annotatedAt, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body, foreign);
 
-    // A name the module reads and no statement binds, which it may still bind
-    // while it runs, `globals()["x"] = 1`: without a cell the page showed its
-    // first value and followed it no more, where a name `global` declares in a
-    // function is followed. A star import changes nothing: what it binds finds
-    // the cell, as a name imported does. Until it is written it is no name, and
-    // the template's read raises `NameError` as Python's does (`templateFrom`):
-    // a typo is such a name too.
+    // A name the module reads and no statement binds: no name, and the
+    // template's read raises `NameError` as Python's does (`templateFrom`), a
+    // typo among them. A star import changes nothing: what it binds finds the
+    // cell, as a name imported does.
     const unwritten = plain ? [] : unboundReads(table, new Set([...state, ...foreign]), root._ast.body);
 
     state = [...state, ...unwritten];
@@ -3388,16 +3325,10 @@ function compile(
         state.includes(hook) ||
         [...bindables, ...deriveds].some((one) => (one.name ?? one) === hook) ||
         foreign.has(hook);
-    // Or bound at its key, `globals()["on_mount"] = enter`, which no statement
-    // names, or maybe at a key no text says, as a star import may bind it. Or
-    // through another door to the namespace, as a prop may be written
-    // (`writtenProps`): `vars()` or `locals()` at the module's level, a
-    // function's `__globals__`, `builtins.globals()`, where the hook was bound
-    // and never called.
-    const keyed = namespaceKeys(root._ast.body);
-    const doors = writtenProps(table, root._ast.body, ['on_mount', 'on_destroy'], {});
-    const lifecycle = (hook) =>
-        !store && (defined(hook) || holdsHook(hook) || bound.includes(hook) || starred || keyed.any || keyed.written.has(hook) || doors.has(hook));
+    // Or written as a prop may be (`writtenProps`), by a function that declares
+    // it `global`, or maybe by a star import.
+    const hookWrites = writtenProps(table, root._ast.body, ['on_mount', 'on_destroy'], {});
+    const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook) || bound.includes(hook) || starred || hookWrites.has(hook));
     const hook = (name) => (defined(name) ? fn(name) : holdsHook(name) ? name : `${NS}.${name}`);
 
     // A component free to define its own `publish` or `derived` keeps it.
@@ -3485,10 +3416,10 @@ function compile(
         (n) => !state.includes(n) && !deriveds.some((d) => d.name === n) && !isFunction(n)
     );
 
-    // And of the names it reads, only those something binds, a statement or
-    // `globals()` at a key, or a star import: a name nothing binds was a key of
-    // the store, `'missing' in store` true and `Object.keys` listing it, where
-    // Python's `hasattr` is false.
+    // And of the names it reads, only those something binds, a statement or a
+    // star import: a name nothing binds was a key of the store, `'missing' in
+    // store` true and `Object.keys` listing it, where Python's `hasattr` is
+    // false.
     const readOnly = store && listed === null ? state.filter((n) => !binds.has(n) && !jsImported.includes(n)) : [];
     const namespaceBound = writtenProps(table, root._ast.body, readOnly, annotatedAt);
     const nothingBinds = new Set(starred ? [] : readOnly.filter((n) => !namespaceBound.has(n)));

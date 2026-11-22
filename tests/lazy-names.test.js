@@ -26,9 +26,9 @@ test('listing the names of a module backwards runs none of its derived', () => {
     expect(instance.reversed_values()).toBe('read');
 });
 
-// Walked lazily, the names still notice a key added through the dict, as
+// Walked lazily, the names still notice a name the module binds meanwhile, as
 // CPython's walk does; a value replaced is no change of shape.
-test('walking the globals of a module stops at a key added meanwhile, not at a value replaced', () => {
+test('walking the globals of a module stops at a name bound meanwhile, not at a value replaced', () => {
     const target = document.body.appendChild(document.createElement('div'));
     const instance = mount(NamespaceIteration, { target });
     flushSync();

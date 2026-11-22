@@ -238,6 +238,11 @@ export { refusal, pyTypeName, keywordsOf, parseKeywords, pyJsonParse } from 'bry
 // makes, as every other refusal here is signed.
 host.name = 'svelthon';
 
+// Each name of a module is what its text makes it, a cell, a key of its store, a
+// prop: the doors to its namespace, `globals()` and the others, read it and
+// write nothing, which the compiler refuses where the text writes through one.
+host.readOnlyNamespace = true;
+
 // How Svelte's reactions read and write, which Bryntime follows a watched
 // Python value through. Whether the code running is a reaction is Svelte's
 // `$effect.tracking()`, and whether a write would be refused is a write Svelte
@@ -2460,8 +2465,7 @@ export function readOnlyProp(name, where) {
     pyRaise(
         'TypeError',
         `'${name}' is a prop of ${where} that the compiler saw no write to, so it is read-only; ` +
-            `write it by its name, \`${name} = …\` (declared \`global\` in a function), ` +
-            `or at its key, \`globals()["${name}"] = …\``
+            `write it by its name, \`${name} = …\` (declared \`global\` in a function)`
     );
 }
 
@@ -3912,10 +3916,9 @@ export const pyRead = (read) => {
 // wherever it enters Python: rendered empty, `None` in an f-string, and the
 // `TypeError` Python raises for `total + 1`, at its line.
 //
-// Save a name no statement of the module binds (`unbound`), which only the
-// running module can write, `globals()["x"] = 1`: until it does, the name is
-// no name, a typo `{conut}` among them, and its read raises `NameError` at its
-// line, as in Python and in Svelte.
+// Save a name no statement of the module binds (`unbound`): no name, a typo
+// `{conut}` among them, and its read raises `NameError` at its line, as in
+// Python and in Svelte.
 //
 // Per namespace and per file, as the lines are (`fileLines`): the template of
 // one variant began where the other's did, and its read raised `NameError`.

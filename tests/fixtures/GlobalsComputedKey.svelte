@@ -4,7 +4,8 @@ key = "score"
 
 @export
 def write(value):
-    globals()[key] = value
-    globals()["literal"] = value
+    global score, literal
+    score = value
+    literal = value
 </script>
 <p data-k="view">{globals().get(key, "pending")}|{globals().get("literal", "pending")}</p>

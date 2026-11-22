@@ -164,13 +164,11 @@ test('a Python child reads its prop again each time it reads it', () => {
 
 // But a prop the child writes somewhere, in a function not called yet, Svelte
 // holds in a derived of the parent's getter, and so does the Python child: read
-// again, it showed the parent's new value beside its derived's old one. Written
-// through `globals()`, at a key written out or computed, as well: no name was
-// written, and the child showed one ticket beside its derived's other.
+// again, it showed the parent's new value beside its derived's old one.
 test('a prop the Python child writes somewhere is held as Svelte holds it', () => {
     const target = document.body.appendChild(document.createElement('div'));
     const instance = mount(WrittenPropRoot, { target });
-    const sides = ['python', 'svelte', 'named', 'computed'];
+    const sides = ['python', 'svelte'];
     const shown = () => sides.map((side) => target.querySelector(`[data-k="${side}"] [data-k="child"]`).textContent);
     const seen = [];
 
@@ -186,9 +184,9 @@ test('a prop the Python child writes somewhere is held as Svelte holds it', () =
     seen.push(shown());
 
     expect(seen).toEqual([
-        Array(4).fill('1|t1|t1!|t2'),
-        Array(4).fill('1|mine|mine!|t2'),
-        Array(4).fill('2|mine|mine!|t3')
+        Array(2).fill('1|t1|t1!|t2'),
+        Array(2).fill('1|mine|mine!|t2'),
+        Array(2).fill('2|mine|mine!|t3')
     ]);
 });
 

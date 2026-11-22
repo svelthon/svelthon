@@ -1,5 +1,5 @@
-# globals() as CPython hands it over: the module's own dict, live. Plain Python,
-# so the same file answers the same under CPython.
+# globals() as CPython hands it over: the module's own dict, live, read here.
+# Plain Python, so the same file answers the same under CPython.
 count = 3
 label = "x"
 
@@ -21,25 +21,6 @@ def reads():
     )
 
 
-def added_value():
-    return added
-
-
-def writes():
-    globals()["added"] = 5
-    return str(added_value())
-
-
-def popped():
-    value = globals().pop("label")
-    return f"{value}|{'label' in globals()}"
-
-
-def deleted():
-    del globals()["count"]
-    return str("count" in globals())
-
-
 if False:
     ghost = 1
 
@@ -47,14 +28,6 @@ if False:
 def unbound():
     try:
         return str(ghost)
-    except NameError:
-        return "missing"
-
-
-def popped_read():
-    globals().pop("label")
-    try:
-        return str(label)
     except NameError:
         return "missing"
 
@@ -71,4 +44,3 @@ def restore():
     global count, label
     count = 3
     label = "x"
-    globals().pop("added", None)

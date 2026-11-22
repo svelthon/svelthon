@@ -180,6 +180,19 @@ wherever it is declared, in the script and in the markup alike, because every
 name the generated code writes beside yours starts with it, in the same scope.
 Any other name is yours, `__cache` included.
 
+And the module's namespace is read, never written, through its doors:
+`globals()`, `vars()` and `locals()` at the module's level, a function's
+`__globals__`, a frame's `f_globals` and a module's `__dict__`. What each name
+is, a state, a derived, a prop, an export, the compiler decides from your text,
+so a name bound by writing it there, `globals()["count"] = 0`,
+`globals().update(…)` or `del globals()["count"]`, is refused at its line; at
+run time a door handed to a function refuses the write as well, with a
+`TypeError`, as an ES module's namespace does. A name is bound by assigning it,
+`global` included, and names made by computation are the keys of a dict of
+your own. Reading stays as Python has it: `globals()["count"]`, `.get`, `in`, a
+walk; and an attribute written on another module, `config.debug = True`, is
+that module's attribute, as before.
+
 | Python | Svelte 5 |
 |---|---|
 | `count = 0` | `let count = $state(0)` |
@@ -324,9 +337,8 @@ Python, and a required prop that was not passed reads as `None`, not
 a new value, which is Svelte's own rule for non-`$bindable` props: each prop is
 destructured by its name, and Svelte reads again at each read one the module
 never writes, as it does for its own. The compiler sees a write by the name,
-`global` included, at a key of `globals()`, and through every other door of
-the module's namespace it knows; a write past them all raises a `TypeError`
-naming the prop.
+`global` included, and the doors of the module's namespace write nothing; a
+write past them raises a `TypeError` naming the name.
 
 A Python parent hands a Python child the value itself, a `float` subclass with
 its class, a generator untouched, and a JavaScript child JavaScript's number or
@@ -549,8 +561,7 @@ enters Python: `{total}` renders nothing, `{f"[{total}]"}` renders `[None]`, and
 Python does, `NameError`: a function of the script, and a handler written in the
 markup, which runs on a click and not while the template renders. A name no
 statement of the module binds is no such name: a typo, `{conut}` for `count`,
-raises `NameError` at its line, as Python and Svelte do; and once the module
-writes it through `globals()`, the page follows it.
+raises `NameError` at its line, as Python and Svelte do.
 
 **The walrus assigns.** `onclick={() => (open = !open)}` is the commonest line in
 a Svelte template, and Python has no short twin: a `lambda` holds an expression,
@@ -1602,9 +1613,8 @@ Python.**
 Either way, the name is JavaScript's import, and Python reads it as JavaScript
 does, live: what its module writes next, Python reads next. It never binds it,
 since JavaScript never assigns an import: `counter = 0` or a `global counter`
-then assigned is refused when the file compiles, with its line, and a write at
-run time, `globals()["counter"] = 0`, raises `TypeError`. A value of your own
-takes another name.
+then assigned is refused when the file compiles, with its line, and so is a
+write through `globals()`. A value of your own takes another name.
 
 For the platform itself, `js` is the JavaScript globals and `to_js()` converts a
 Python container into something a Web API will accept:
@@ -1879,7 +1889,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 222 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 214 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1889,7 +1899,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **286 KB gzip**, Brython runtime included: what the demo
+- production build: **287 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1959,7 +1969,7 @@ runs. Keep hot loops out of a component, or reach for the C extensions
 Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
 not feel.
 
-Loading is the other price: 286 KB gzip, the Brython runtime included, and
+Loading is the other price: 287 KB gzip, the Brython runtime included, and
 **0.12 s to the demo's content** in production with a cold cache, 0.33 s with
 the processor slowed four times, as a modest laptop's is. Paid once per
 session, not per page, since the app never reloads.

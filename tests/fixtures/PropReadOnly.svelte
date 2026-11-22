@@ -1,6 +1,6 @@
 <script lang="python">
 # Props written through a door of the namespace no rule of the compiler names,
-# `__getattribute__`: read-only, as the compiler saw no write to them.
+# `__getattribute__`: the door is read-only at run time.
 ticket: str
 count: int = 3
 

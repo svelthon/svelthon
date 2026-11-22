@@ -185,6 +185,19 @@ refusé partout où il est déclaré, dans le script comme dans le gabarit, parc
 tous les noms que le code généré écrit à côté des vôtres commencent ainsi, dans
 la même portée. Tout autre nom est le vôtre, `__cache` compris.
 
+Et le namespace du module se lit, sans jamais s'écrire, par ses portes :
+`globals()`, `vars()` et `locals()` au niveau du module, le `__globals__` d'une
+fonction, le `f_globals` d'un cadre et le `__dict__` d'un module. Ce qu'est
+chaque nom, un état, un dérivé, un prop, un export, le compilateur le décide
+d'après votre texte : un nom lié en l'écrivant là, `globals()["count"] = 0`,
+`globals().update(…)` ou `del globals()["count"]`, est refusé à sa ligne ; à
+l'exécution, une porte passée à une fonction refuse aussi l'écriture, par une
+`TypeError`, comme le namespace d'un module ES. Un nom se lie en l'affectant,
+`global` compris, et des noms faits par calcul sont les clés d'un dict à vous.
+La lecture reste celle de Python : `globals()["count"]`, `.get`, `in`, un
+parcours ; et un attribut écrit sur un autre module, `config.debug = True`,
+reste un attribut de ce module, comme avant.
+
 | Python | Svelte 5 |
 |---|---|
 | `count = 0` | `let count = $state(0)` |
@@ -330,10 +343,9 @@ parent traverse jusqu'au Python, et un prop requis non fourni vaut `None`, pas
 parent passe une nouvelle valeur : c'est la règle de Svelte pour les props non
 `$bindable`. Chaque prop est déstructuré par son nom, et Svelte relit à chaque
 lecture celui que le module n'écrit jamais, comme pour les siens. Le
-compilateur voit une écriture par le nom, `global` compris, à une clé de
-`globals()`, et par chacune des autres portes du namespace du module qu'il
-connaît ; une écriture qui ne passe par aucune lève une `TypeError` qui nomme
-le prop.
+compilateur voit une écriture par le nom, `global` compris, et les portes du
+namespace du module n'écrivent rien ; une écriture qui passe à côté lève une
+`TypeError` qui nomme le nom.
 
 Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
 de `float` avec sa classe, un générateur intact, et à un enfant JavaScript le
@@ -566,8 +578,7 @@ sa ligne. Le code Python le lit comme Python, `NameError` : une fonction du
 script, et un gestionnaire écrit dans le balisage, qui s'exécute au clic et non
 pendant le rendu. Un nom qu'aucune instruction du module ne lie n'est pas un
 nom : une faute de frappe, `{conut}` pour `count`, lève `NameError` à sa ligne,
-comme Python et Svelte ; et une fois que le module l'écrit par `globals()`, la
-page le suit.
+comme Python et Svelte.
 
 **Le morse affecte.** `onclick={() => (open = !open)}` est la ligne la plus
 courante d'un gabarit Svelte, et Python n'en a pas d'équivalent court : un
@@ -1679,8 +1690,8 @@ Dans les deux cas, le nom est l'import de JavaScript, et Python le lit comme
 JavaScript, vivant : ce que son module écrit ensuite, Python le lit ensuite. Il
 ne le lie jamais, puisque JavaScript n'affecte jamais un import : `counter = 0`
 ou un `global counter` suivi d'une affectation est refusé à la compilation, avec
-sa ligne, et une écriture à l'exécution, `globals()["counter"] = 0`, lève
-`TypeError`. Une valeur à vous prend un autre nom.
+sa ligne, comme une écriture par `globals()`. Une valeur à vous prend un autre
+nom.
 
 Pour la plateforme elle-même, `js` donne les globales JavaScript et `to_js()`
 convertit un conteneur Python en quelque chose qu'une API Web acceptera :
@@ -1922,7 +1933,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 222 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 214 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1932,7 +1943,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **286 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **287 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -2034,7 +2045,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 286 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 287 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.

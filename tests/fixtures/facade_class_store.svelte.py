@@ -10,11 +10,13 @@ _original = Profile
 
 
 def remove_profile():
-    globals().pop("Profile", None)
+    global Profile
+    del Profile
 
 
 def restore_profile():
-    globals()["Profile"] = _original
+    global Profile
+    Profile = _original
 
 
 def remove_other():

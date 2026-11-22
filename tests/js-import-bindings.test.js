@@ -16,7 +16,6 @@ import { mount, flushSync } from './mounted.js';
 import * as Private from './fixtures/js_import_private.py';
 import { write, write_attribute } from './fixtures/js_import_private_writer.py';
 import * as Source from './fixtures/js_reexport_source.js';
-import JsImportWrite from './fixtures/JsImportWrite.svelte';
 import JsImportComprehension from './fixtures/JsImportComprehension.svelte';
 import * as Reads from './fixtures/js_import_reads.py';
 import * as ReadsExported from './fixtures/js_import_reads_exported.py';
@@ -151,15 +150,12 @@ describe('what only reads the name runs, and answers what Python answers', () =>
     });
 });
 
-// At run time, each write Python can make to the module's names, the name not
-// exported: refused as an assignment to an import is, and the import, read by
-// Python and by JavaScript, keeps following its own module.
+// At run time, a write another module makes to the module's names, the name
+// not exported: refused as an assignment to an import is, and the import, read
+// by Python and by JavaScript, keeps following its own module. Its own
+// namespace takes no write (`namespace-read-only.test.js`).
 describe('a write at run time to a name JavaScript imports is refused', () => {
     test.for([
-        ['through globals()[…]', () => Private.by_item()],
-        ['through globals().update', () => Private.by_update()],
-        ['through globals().pop', () => Private.by_pop()],
-        ['through del globals()[…]', () => Private.by_delete()],
         ['from another module', () => write()],
         ['from another module, by setattr', () => write_attribute()]
     ])('%s', ([, writing]) => {
@@ -169,18 +165,5 @@ describe('a write at run time to a name JavaScript imports is refused', () => {
 
         Source.bump();
         expect([Private.read(), Private.read_global(), Source.counter]).toEqual([1, 1, 1]);
-    });
-
-    test('in a component, and the page keeps following the import', () => {
-        Source.reset();
-        const target = document.body.appendChild(document.createElement('div'));
-        const instance = mount(JsImportWrite, { target });
-        flushSync();
-
-        expect(() => instance.overwrite()).toThrow(/'counter' is a JavaScript import of .*JsImportWrite\.svelte/);
-
-        Source.bump();
-        expect(instance.read_global()).toBe(1);
-        target.remove();
     });
 });
