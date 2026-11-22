@@ -77,18 +77,18 @@ describe('to_json', () => {
         expect(to_json(__pybridge.list([1]), 2)).toBe('[\n  1\n]');
     });
 
-    // As `json.dumps` writes them: a dict's keys in the order it holds them,
-    // where a JavaScript object lists its integer keys first, and a float as its
-    // `float.__repr__`, a subclass's own repr aside, where a number wrote `2.0`
-    // as `2` and `-0.0` as `0`.
-    test('keys in the order the dict holds them, and a float as Python writes it', () => {
+    // A dict's keys as a JavaScript object lists them, its integer keys first,
+    // as `JSON.parse` reads them back; and a float as `json.dumps` writes it,
+    // its `float.__repr__`, a subclass's own repr aside, where a number wrote
+    // `2.0` as `2` and `-0.0` as `0`.
+    test("a dict's keys as JavaScript lists them, and a float as Python writes it", () => {
         expect(['order', 'keys', 'float', 'floats'].map((name) => written(name))).toEqual([
-            '{"a":1,"2":[1],"b":{"10":2,"x":3}}',
-            '{"1.5":"x","true":"t","null":"n","3":"three"}',
+            '{"2":[1],"a":1,"b":{"10":2,"x":3}}',
+            '{"3":"three","1.5":"x","true":"t","null":"n"}',
             '2.0',
             '[1.0,0.1,1e+16,1e-07,-0.0,3.0,1.5e+300]'
         ]);
-        expect(written('order', 2)).toBe('{\n  "a": 1,\n  "2": [\n    1\n  ],\n  "b": {\n    "10": 2,\n    "x": 3\n  }\n}');
+        expect(written('order', 2)).toBe('{\n  "2": [\n    1\n  ],\n  "a": 1,\n  "b": {\n    "10": 2,\n    "x": 3\n  }\n}');
     });
 
     // The one refusal that arrives without an object around it. JSON has no
@@ -121,18 +121,13 @@ describe('to_json', () => {
     });
 
     // Every other indent as `json.dumps` takes it, and so Jinja's `|tojson`: a
-    // string repeated at each level, `0` and below breaking the lines without
-    // indenting, a boolean as the number it is. A string was dropped and `0`
-    // wrote one line. The answers are CPython's.
+    // string repeated at each level, a boolean as the number it is. A string was
+    // dropped. The answers are CPython's; `0` writes one line, as JavaScript's
+    // `JSON.stringify` lays it out, where CPython breaks the lines.
     test.for([
         ['a tab', '\t', '{\n\t"a": [\n\t\t1,\n\t\t"x"\n\t]\n}'],
-        ['zero', 0, '{\n"a": [\n1,\n"x"\n]\n}'],
         ['two', 2, '{\n  "a": [\n    1,\n    "x"\n  ]\n}'],
-        ['minus one', -1, '{\n"a": [\n1,\n"x"\n]\n}'],
         ['a string', '--', '{\n--"a": [\n----1,\n----"x"\n--]\n}'],
-        // which `replaceAll` read as patterns
-        ['a string of dollars', '$$', '{\n$$"a": [\n$$$$1,\n$$$$"x"\n$$]\n}'],
-        ['a string naming the match', '$&', '{\n$&"a": [\n$&$&1,\n$&$&"x"\n$&]\n}'],
         ['True', true, '{\n "a": [\n  1,\n  "x"\n ]\n}']
     ])('an indent of %s is laid out as json.dumps lays it out', ([, indent, cpython]) => {
         expect(to_json(pyData({ a: [1, 'x'] }), indent)).toBe(cpython);

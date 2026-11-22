@@ -1,4 +1,4 @@
-# What `to_json` writes of a dict's key order and of a float, beside what
+# What `to_json` writes of a dict's keys and of a float, beside what
 # CPython's `json.dumps` writes of the same, with the separators `to_json` uses.
 __all__ = ["written"]
 
