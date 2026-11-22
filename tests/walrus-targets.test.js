@@ -242,7 +242,14 @@ describe('a walrus onto something other than a name', () => {
     test.for([
         ['in-field', '1|1'],
         ['in-debug', '5|(chosen := 5)=5'],
-        ['in-spec', '6|(chosen := 6)=  6']
+        ['in-spec', '6|(chosen := 6)=  6'],
+        // A comment ending in `=` or a conversion is neither.
+        ['in-comment', '7|7'],
+        ['in-comment-converted', '8|8'],
+        ['in-comment-spec', '9|  9'],
+        // A debug field's label keeps its lines, and none of its comments.
+        ['in-label-before', '1|(chosen := len("#")) \n=1'],
+        ['in-label-after', '11|(chosen := 11)= \n 11']
     ])('a walrus in an f-string field writes the name: %s', ([k, shown]) => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(WalrusTargets, { target });

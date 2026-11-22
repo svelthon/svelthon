@@ -19,7 +19,7 @@ test('a t-string a handler writes a name through keeps its text', () => {
     mount(TemplateStringWalrus, { target });
     flushSync();
 
-    for (const k of ['plain', 'debug', 'converted', 'formatted', 'first', 'last', 'both', 'before', 'after', 'dotted', 'named', 'namedNext']) {
+    for (const k of ['plain', 'debug', 'converted', 'formatted', 'first', 'last', 'both', 'before', 'after', 'dotted', 'named', 'namedNext', 'commented']) {
         target.querySelector(`[data-k="${k}"]`).click();
         flushSync();
         seen.push(target.querySelector('[data-k="shown"]').textContent);
@@ -40,7 +40,9 @@ test('a t-string a handler writes a name through keeps its text', () => {
         "('row.name=', ' ', '')|[('row.name', 'Grace', 'r', ''), ('(count := count + 1)', 11, None, '')]",
         // A named escape is a character of the text, and no field.
         "('left π caption=', ' / (count := count + 1)=', ' right')|[('caption', 'Ada', 'r', ''), ('(count := count + 1)', 12, 'r', '')]",
-        "('• ', ' ', '')|[('(count := count + 1)', 13, None, ''), ('caption', 'Ada', None, '')]"
+        "('• ', ' ', '')|[('(count := count + 1)', 13, None, ''), ('caption', 'Ada', None, '')]",
+        // A label and an expression keep their lines, and none of their comments.
+        "('(count := count + 1) \\n=', ' ', '')|[('(count := count + 1) \\n', 14, 'r', ''), ('caption \\n', 'Ada', None, '')]"
     ]);
 });
 

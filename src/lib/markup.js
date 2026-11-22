@@ -636,9 +636,12 @@ function walrusFields(source, run) {
 
         return found.map(([start, end]) => {
             const field = source.slice(start, end);
-            const conversion = field.match(CONVERSION)?.[0] ?? '';
+            // The conversion and the `=` read off the code alone: a comment
+            // ending in one, `# update =`, is neither.
+            const code = uncommented(field);
+            const conversion = code.match(CONVERSION)?.[0] ?? '';
             const text = field.slice(0, field.length - conversion.length);
-            const debug = text.match(/(?<![=!<>])=\s*$/);
+            const debug = code.slice(0, text.length).match(/(?<![=!<>])=\s*$/);
             const expression = debug ? text.slice(0, debug.index) : field;
 
             return { start, end, conversion, text, debug, expression, written: walrus(expression), mine: own.has(start) };
@@ -652,8 +655,8 @@ function walrusFields(source, run) {
 
     for (const { start, end, conversion, text, debug, expression, written, mine } of fields) {
         if (mine) {
-            expressions.push(debug ? expression : text);
-            labels.push(debug ? text : '');
+            expressions.push(commentless(debug ? expression : text));
+            labels.push(debug ? commentless(text) : '');
         }
         if (written === expression && !(handed && mine && debug)) continue;
 
@@ -661,7 +664,7 @@ function walrusFields(source, run) {
             ? source.slice(at, start) + written
             : mine
               ? `${source.slice(at, start)}${written}${conversion || (source[end] === ':' ? '' : '!r')}`
-              : `${source.slice(at, start - 1)}{${JSON.stringify(text)}}{${written}${conversion || (source[end] === ':' ? '' : '!r')}`;
+              : `${source.slice(at, start - 1)}{${JSON.stringify(commentless(text))}}{${written}${conversion || (source[end] === ':' ? '' : '!r')}`;
         at = end;
     }
 
@@ -669,6 +672,11 @@ function walrusFields(source, run) {
 
     return handed ? `${CALLS.tstring}(${literal}, ${JSON.stringify(expressions)}, ${JSON.stringify(labels)})` : literal;
 }
+
+// A field's text as Python keeps it in its label and its expression: each
+// comment dropped, the line it ended kept, `(n := 1) # note\n=` as
+// `(n := 1) \n=`.
+const commentless = (text) => replaceLiterals(text, (one) => (one[0] === '#' ? '' : one));
 
 // The fields of a t-string's own braces, by where each starts, and not those of
 // a format specification inside one, `{x:{width}}`: the literal's braces

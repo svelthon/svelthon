@@ -44,6 +44,16 @@ use_left = True
 <button data-k="in-field" onclick={lambda: (said := f"{(chosen := chosen + 1)}")}>field</button>
 <button data-k="in-debug" onclick={lambda: (said := f"{(chosen := 5)=}")}>debug</button>
 <button data-k="in-spec" onclick={lambda: (said := f"{(chosen := 6)=:>3}")}>spec</button>
+<button data-k="in-comment" onclick={lambda: (said := f"""{(chosen := 7) # update =
+}""")}>comment</button>
+<button data-k="in-comment-converted" onclick={lambda: (said := f"""{(chosen := 8) # note !r
+!s}""")}>comment converted</button>
+<button data-k="in-comment-spec" onclick={lambda: (said := f"""{(chosen := 9) # note =
+:>3}""")}>comment spec</button>
+<button data-k="in-label-before" onclick={lambda: (said := f"""{(chosen := len("#")) # note
+=}""")}>label before</button>
+<button data-k="in-label-after" onclick={lambda: (said := f"""{(chosen := 11)= # note
+:>3}""")}>label after</button>
 
 <!-- A receiver in parentheses, chosen by a conditional: the row it names is
      written, by the dot and by a key, and the next one once it names another. -->

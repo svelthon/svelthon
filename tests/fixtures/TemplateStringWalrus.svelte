@@ -31,4 +31,7 @@ def show(t):
 <button data-k="dotted" onclick={lambda: show(t"{row.name=} {(count := count + 1)}")}>dotted</button>
 <button data-k="named" onclick={lambda: show(t"left \N{GREEK SMALL LETTER PI} {caption=} / {(count := count + 1)=} right")}>named</button>
 <button data-k="namedNext" onclick={lambda: show(t"\N{BULLET} {(count := count + 1)}" t" {caption}")}>namedNext</button>
+<button data-k="commented" onclick={lambda: show(t"""{(count := count + 1) # note
+=} {caption # who
+}""")}>commented</button>
 <p data-k="shown">{shown}</p>
