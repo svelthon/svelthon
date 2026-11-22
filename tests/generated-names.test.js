@@ -1,27 +1,26 @@
 // @vitest-environment node
 //
-// The one unguarded coupling in the project, made guarded.
+// The names a compiled template expression calls, `__brycomp_event`,
+// `__brycomp_truthy`, `__brycomp_assign` and the rest: `markup.js` writes the
+// calls, `compile.js` binds the names, and `bridge.js` tells an attribute's
+// wrapper by one. All three spell them through one table, `CALLS`
+// (`template-names.js`), so a rename is made in one place.
 //
-// `markup.js` writes the calls a compiled template expression makes — `__brycomp_event`,
-// `__brycomp_truthy`, `__brycomp_assign` and the rest — and `compile.js` emits their
-// definitions. The two files must agree on eleven spellings and share no
-// constant for them.
+// What the table cannot hold is checked here, and in **both directions**.
 //
-// So the agreement is checked, and in **both directions**,
-// which is a thing this file did not do at first.
+// Forwards: every other `__brycomp_name` invented in the markup pass must have
+// a definition in the compiler, or be named below as markup-local, which is a
+// deliberate act rather than an oversight. That catches the failure that
+// shows: a call to something nobody defined.
 //
-// Forwards: every `__brycomp_name` invented in the markup pass must have a definition in
-// the compiler, or be named below as markup-local, which is a deliberate act
-// rather than an oversight. That catches the failure that shows: a call to
-// something nobody defined.
-//
-// Backwards: every `__brycomp_name` the compiler publishes *for the template* must be
-// one the markup still writes. That catches the failure that does not show. A
-// name the markup stops writing leaves its `bind()` in every component the
-// project ever compiles, for ever, and nothing goes red.
+// Backwards: every name the compiler publishes *for the template* must be one
+// the markup still writes. That catches the failure that does not show. A name
+// the markup stops writing leaves its `bind()` in every component the project
+// ever compiles, for ever, and nothing goes red.
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { CALLS } from '../src/lib/template-names.js';
 
 const read = (name) =>
     readFileSync(fileURLToPath(new URL(`../src/lib/${name}`, import.meta.url)), 'utf8');
@@ -67,10 +66,7 @@ const MARKUP_LOCAL = new Set([
     '__brycomp_probe',
     // The token a positional pattern's default is taken under, the parameter
     // of the function that takes it (`initializing`).
-    '__brycomp_token',
-    // The value a default stands in for when absent, the parameter of the
-    // function that tells it (`orDefault`).
-    '__brycomp_given'
+    '__brycomp_token'
 ]);
 
 // Python's own special methods, which the markup calls on a number it reads at a
@@ -82,26 +78,58 @@ const PYTHON_OWN = new Set(['__neg__', '__pos__']);
 // group binding on, which the markup's prose names.
 const SVELTE_OWN = new Set(['__value']);
 
+const SHARED = new Set(Object.values(CALLS));
+
+// Each entry of the table a source reaches, `CALLS.truthy`, by the name it
+// stands for.
+const reached = (source) => new Set([...source.matchAll(/\bCALLS\.(\w+)/g)].map((one) => CALLS[one[1]]));
+
 test('every generated name the markup writes is defined by the compiler', () => {
     const markup = read('markup.js');
     const compiler = read('compile.js');
 
     const written = [...new Set([...markup.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]))]
-        .filter((one) => !MARKUP_LOCAL.has(one) && !PYTHON_OWN.has(one) && !SVELTE_OWN.has(one))
+        .filter((one) => !MARKUP_LOCAL.has(one) && !PYTHON_OWN.has(one) && !SVELTE_OWN.has(one) && !SHARED.has(one))
         .sort();
 
     // The list is not written out here on purpose: it is read from the file that
-    // invents the names, so a twelfth one cannot arrive unnoticed.
-    expect(written.length).toBeGreaterThan(10);
+    // invents the names, so a new one cannot arrive unnoticed.
+    expect(written.length).toBeGreaterThan(3);
 
     expect(written.filter((one) => !compiler.includes(one))).toEqual([]);
 });
 
 test('and a name the compiler stopped emitting turns this red', () => {
     // The failure this guards against, spelled out: renaming one side only.
-    const compiler = read('compile.js').replace(/__brycomp_event/g, '__handler');
+    const compiler = read('compile.js').replace(/__brycomp_pybridge/g, '__bridge');
 
-    expect(compiler.includes('__brycomp_event')).toBe(false);
+    expect(compiler.includes('__brycomp_pybridge')).toBe(false);
+});
+
+// What the compiler writes into the template's functions itself: every dot of
+// the markup becomes a call there, written by Brycomp's `templateDots` under
+// the names the compiler's runtime gives `readAttr` and `writeAttr`, and a
+// t-string it rewrote under `templateText`'s, so the markup pass never spells
+// them. Read off those entries of `compile.js`, so a name it stops giving
+// leaves this list as well.
+const dots = () => [...read('compile.js').matchAll(/^\s*(?:readAttr|writeAttr|templateText): CALLS\.(\w+),?$/gm)].map((one) => CALLS[one[1]]);
+
+test('the dots of the template are written under three names of the runtime', () => {
+    expect(dots()).toEqual(['__brycomp_getattr', '__brycomp_setattr', '__brycomp_tstring']);
+});
+
+// The markup pass, with the table of attribute wrappers it reads: `CALLS.class`
+// and `CALLS.truthy` are chosen there, by an attribute's name.
+const markupSource = () => `${read('markup.js')}\n${read('attributes.js')}`;
+
+const written = (markup) => new Set([...reached(markup), ...dots()]);
+
+test('every name of the table is one the compiler binds and the markup writes', () => {
+    const compiler = reached(read('compile.js'));
+    const markup = written(markupSource());
+
+    expect([...SHARED].filter((one) => !compiler.has(one))).toEqual([]);
+    expect([...SHARED].filter((one) => !markup.has(one))).toEqual([]);
 });
 
 // What the compiler hands the template, and only that. `compile.js` writes many
@@ -110,7 +138,7 @@ test('and a name the compiler stopped emitting turns this red', () => {
 // component script talking to itself.
 //
 // Two shapes carry the template's own set, and both are read off the file rather
-// than listed here, for the same reason the forward direction is: a tenth entry
+// than listed here, for the same reason the forward direction is: a new entry
 // must not be able to arrive unnoticed.
 const published = (compiler) => {
     const at = compiler.indexOf('function templateBridge(');
@@ -120,38 +148,15 @@ const published = (compiler) => {
 
     return [
         ...new Set([
-            // `__brycomp_truthy: '__brycomp_pybridge.truthy'` and its neighbours, each bound
-            // in the namespace under its key.
-            ...[...adapters.matchAll(/^ {4}(__\w+): /gm)].map((one) => one[1]),
-            // `const __brycomp_event = …`, `const __brycomp_group = group;`, which a directive
-            // and a handler are given by name rather than through the namespace.
-            ...[...bridge.matchAll(/const (__\w+) =/g)].map((one) => one[1])
+            // `[CALLS.truthy]: '__brycomp_pybridge.truthy'` and its neighbours,
+            // and those bound under their own names, each in the namespace.
+            ...reached(adapters),
+            // `const ${CALLS.event} = …`, which a directive and a handler are
+            // given by name rather than through the namespace.
+            ...[...bridge.matchAll(/const \$\{CALLS\.(\w+)\} =/g)].map((one) => CALLS[one[1]])
         ])
     ].sort();
 };
-
-// Whole names, not substrings. `includes` was the first spelling of this and it
-// answered true for `__brycomp_spread` in a file that only wrote `__spreadX`, which is
-// exactly the rename this is meant to catch.
-//
-// Plus what the compiler writes into the template's functions itself: every dot
-// of the markup becomes a call there, written by Brycomp's `templateDots` under
-// the names the compiler's runtime gives `readAttr` and `writeAttr`, and a
-// t-string it rewrote under `templateText`'s, so the markup pass never spells
-// them. Read off those entries of `compile.js`, so a name it stops giving
-// leaves this list as well.
-const dots = () => [...read('compile.js').matchAll(/^\s*(?:readAttr|writeAttr|templateText): '(__\w+)',?$/gm)].map((one) => one[1]);
-
-const written = (markup) =>
-    new Set([...[...markup.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]), ...dots()]);
-
-test('the dots of the template are written under three names of the runtime', () => {
-    expect(dots()).toEqual(['__brycomp_getattr', '__brycomp_setattr', '__brycomp_tstring']);
-});
-
-// The markup pass, with the table of attribute wrappers it reads: `__brycomp_class`
-// and `__brycomp_truthy` are chosen there, by an attribute's name.
-const markupSource = () => `${read('markup.js')}\n${read('attributes.js')}`;
 
 test('every name the compiler publishes to the template is one the markup writes', () => {
     const markup = written(markupSource());
@@ -165,7 +170,7 @@ test('every name the compiler publishes to the template is one the markup writes
 test('and one the markup stopped writing turns this red', () => {
     // The failure this guards against, and the reason it needed guarding: it
     // costs a dead `bind()` in every compiled component and says nothing.
-    const markup = written(markupSource().replace(/__brycomp_spread\b/g, '__spreadX'));
+    const markup = written(markupSource().replace(/\bCALLS\.spread\b/g, 'CALLS.spreadX'));
     const names = published(read('compile.js'));
 
     expect(names.filter((one) => !markup.has(one))).toEqual(['__brycomp_spread']);

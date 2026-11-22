@@ -12,6 +12,7 @@
 // order written, so everything below finds it started.
 import 'bryntime';
 import { INJECTED } from './injected.js';
+import { CALLS } from './template-names.js';
 import {
     compile as compileCommon,
     atomic,
@@ -299,7 +300,7 @@ function writtenProps(table, body, props, annotatedAt) {
 
         if (wanted.has(name) && (through || block === table.top || isGlobalScope(scopeIn(block, name)))) written.add(name);
 
-        if (node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === '__brycomp_assign' && wanted.has(node.args[0]?.value)) {
+        if (node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === CALLS.assign && wanted.has(node.args[0]?.value)) {
             written.add(node.args[0].value);
         }
 
@@ -1053,14 +1054,14 @@ const RUNTIME = {
     withNamespace: '__brycomp_withNamespace',
     __brycomp_pybridge: '__brycomp_pybridge',
     jsGlobal: '__brycomp_global',
-    group: '__brycomp_group',
-    readAttr: '__brycomp_getattr',
-    restOf: '__brycomp_rest',
-    unpackStarred: '__brycomp_unpack',
-    writeAttr: '__brycomp_setattr',
-    writeItem: '__brycomp_setitem',
-    pySlice: '__brycomp_slice',
-    templateText: '__brycomp_tstring'
+    group: CALLS.group,
+    readAttr: CALLS.getattr,
+    restOf: CALLS.rest,
+    unpackStarred: CALLS.unpack,
+    writeAttr: CALLS.setattr,
+    writeItem: CALLS.setitem,
+    pySlice: CALLS.slice,
+    templateText: CALLS.tstring
 };
 
 // What stands in for the standard modules an author reaches for first: a
@@ -1078,40 +1079,35 @@ const MODULE_INSTEAD = {
 // str(): a template may hold a foreign JavaScript value, a DOM node from
 // bind:this, on which Brython's classifier trips. These fall back.
 const ADAPTERS = {
-    __brycomp_truthy: '__brycomp_pybridge.truthy',
-    __brycomp_hidden: '__brycomp_pybridge.hidden',
-    __brycomp_text: '__brycomp_pybridge.str',
-    // A value alone in an attribute of text, written as `__brycomp_text` writes it,
+    [CALLS.truthy]: '__brycomp_pybridge.truthy',
+    [CALLS.hidden]: '__brycomp_pybridge.hidden',
+    [CALLS.text]: '__brycomp_pybridge.str',
+    // A value alone in an attribute of text, written as `CALLS.text` writes it,
     // and one a spread written after it may override.
-    __brycomp_attr: '__brycomp_pybridge.attr',
-    __brycomp_heldAttr: '__brycomp_pybridge.heldAttr',
-    __brycomp_html: '__brycomp_pybridge.html',
-    __brycomp_seq: '__brycomp_pybridge.seq',
-    __brycomp_key: '__brycomp_pybridge.key',
-    __brycomp_class: '__brycomp_pybridge.klass',
+    [CALLS.attr]: '__brycomp_pybridge.attr',
+    [CALLS.heldAttr]: '__brycomp_pybridge.heldAttr',
+    [CALLS.html]: '__brycomp_pybridge.html',
+    [CALLS.seq]: '__brycomp_pybridge.seq',
+    [CALLS.key]: '__brycomp_pybridge.key',
+    [CALLS.class]: '__brycomp_pybridge.klass',
     // A handler in a spread is adapted as one written by name.
-    __brycomp_spreadElement: '(value) => __brycomp_pybridge.spreadElement(value, __brycomp_event)',
+    [CALLS.spreadElement]: `(value) => __brycomp_pybridge.spreadElement(value, ${CALLS.event})`,
     // And on a control a `bind:group` binds, its `value` as the group reads it.
-    __brycomp_spreadChoice: '(value) => __brycomp_pybridge.spreadElement(value, __brycomp_event, true)',
+    [CALLS.spreadChoice]: `(value) => __brycomp_pybridge.spreadElement(value, ${CALLS.event}, true)`,
     // And on a custom element, whose properties take the values as they are.
-    __brycomp_spreadCustom: '(value) => __brycomp_pybridge.spreadElement(value, __brycomp_event, false, true)',
+    [CALLS.spreadCustom]: `(value) => __brycomp_pybridge.spreadElement(value, ${CALLS.event}, false, true)`,
     // And one no spread follows, the names written after it (`later`).
-    __brycomp_spreadBefore: '(later, grouped) => (value) => __brycomp_pybridge.spreadElement(value, __brycomp_event, grouped, false, later)',
-    __brycomp_spread: '__brycomp_pybridge.spread',
-    __brycomp_spreadPython: '__brycomp_pybridge.spreadPython',
+    [CALLS.spreadBefore]: `(later, grouped) => (value) => __brycomp_pybridge.spreadElement(value, ${CALLS.event}, grouped, false, later)`,
+    [CALLS.spread]: '__brycomp_pybridge.spread',
+    [CALLS.spreadPython]: '__brycomp_pybridge.spreadPython',
     // And on a `<svelte:element>`, the entries, which its name then reads.
-    __brycomp_spreadEntries: '__brycomp_pybridge.spreadEntries',
+    [CALLS.spreadEntries]: '__brycomp_pybridge.spreadEntries',
     // A value boxed anew at each read, which its `<svelte:element>` then reads.
-    __brycomp_boxed: '(value) => [value]',
-    __brycomp_bound: '__brycomp_pybridge.bound',
-    __brycomp_assign: '__brycomp_assign',
-    __brycomp_getattr: '__brycomp_getattr',
-    __brycomp_rest: '__brycomp_rest',
-    __brycomp_unpack: '__brycomp_unpack',
-    __brycomp_setattr: '__brycomp_setattr',
-    __brycomp_setitem: '__brycomp_setitem',
-    __brycomp_slice: '__brycomp_slice',
-    __brycomp_tstring: '__brycomp_tstring'
+    [CALLS.boxed]: '(value) => [value]',
+    [CALLS.bound]: '__brycomp_pybridge.bound',
+    // Bound under their own names: the template bridge's, and the runtime's
+    // imported under them (`RUNTIME`).
+    ...Object.fromEntries([CALLS.assign, CALLS.getattr, CALLS.rest, CALLS.unpack, CALLS.setattr, CALLS.setitem, CALLS.slice, CALLS.tstring].map((one) => [one, one]))
 };
 
 // What Brycomp is told of the framework it compiles for, by the interface its
@@ -2416,8 +2412,8 @@ function templateBridge(c) {
     if (c.store) return [];
 
     return [
-        `const __brycomp_event = (fn) => __brycomp_pyEvent(fn);`,
-        `const __brycomp_attach = (fn) => __brycomp_pyAttach(fn);`,
+        `const ${CALLS.event} = (fn) => __brycomp_pyEvent(fn);`,
+        `const ${CALLS.attach} = (fn) => __brycomp_pyAttach(fn);`,
         // What an `{#each}` walks, declared beside it by the markup, `{const
         // __brycomp_rows_… = __brycomp_collection(…)}` read as `{#each __brycomp_rows_…() as row}`:
         // the iterable evaluated in a derived, as Svelte evaluates a block's
@@ -2433,7 +2429,7 @@ function templateBridge(c) {
         // a thousand times. Written here, in runes, since the runtime knows no
         // host; a server, which has no effect, takes the rows as the block
         // reads them.
-        `const __brycomp_collection = (compute, keyOf) => {`,
+        `const ${CALLS.collection} = (compute, keyOf) => {`,
         `    const walk = __brycomp_pybridge.walk(keyOf);`,
         `    const yielded = $derived.by(() => ({ rows: walk.computed(compute) }));`,
         `    let revision = $state.raw(0);`,
@@ -2446,7 +2442,7 @@ function templateBridge(c) {
         // What `(name := value)` in a handler compiles to. The write goes
         // through the namespace, so through the accessor, so the signal fires:
         // the whole reason the walrus can mean this here.
-        `const __brycomp_assign = (name, value) => { ${NS}[name] = value; return value; };`
+        `const ${CALLS.assign} = (name, value) => { ${NS}[name] = value; return value; };`
         // The same walrus aimed at an attribute or a key rather than a name,
         // and `bind:group`'s action, are imported under the names the markup
         // pass emits (`__brycomp_setattr`, `__brycomp_setitem`, `__brycomp_group`) rather than
@@ -2891,7 +2887,7 @@ function effectLines(c) {
         // logger's factory saw what was not yet there.
         ...c.inspects.map((i) =>
             i.logger
-                ? `$inspect(...__brycomp_invoke(__brycomp_invoke(${fn(i.name)})[0])).with((() => __brycomp_event(__brycomp_invoke(__brycomp_invoke(${fn(i.name)})[1])))());`
+                ? `$inspect(...__brycomp_invoke(__brycomp_invoke(${fn(i.name)})[0])).with((() => ${CALLS.event}(__brycomp_invoke(__brycomp_invoke(${fn(i.name)})[1])))());`
                 : `$inspect(...__brycomp_invoke(${fn(i.name)}));`
         ),
         // A root owns its own scope: it is not cleaned up when the component is,

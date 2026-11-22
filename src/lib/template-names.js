@@ -1,0 +1,35 @@
+// What a compiled template expression calls, under one spelling: the markup
+// pass writes each call, the compiler binds each name where the template's
+// functions find it, and the bridge tells an attribute's wrapper by it.
+export const CALLS = {
+    truthy: '__brycomp_truthy',
+    hidden: '__brycomp_hidden',
+    text: '__brycomp_text',
+    attr: '__brycomp_attr',
+    heldAttr: '__brycomp_heldAttr',
+    html: '__brycomp_html',
+    seq: '__brycomp_seq',
+    key: '__brycomp_key',
+    class: '__brycomp_class',
+    spreadElement: '__brycomp_spreadElement',
+    spreadChoice: '__brycomp_spreadChoice',
+    spreadCustom: '__brycomp_spreadCustom',
+    spreadBefore: '__brycomp_spreadBefore',
+    spread: '__brycomp_spread',
+    spreadPython: '__brycomp_spreadPython',
+    spreadEntries: '__brycomp_spreadEntries',
+    boxed: '__brycomp_boxed',
+    bound: '__brycomp_bound',
+    assign: '__brycomp_assign',
+    getattr: '__brycomp_getattr',
+    rest: '__brycomp_rest',
+    unpack: '__brycomp_unpack',
+    setattr: '__brycomp_setattr',
+    setitem: '__brycomp_setitem',
+    slice: '__brycomp_slice',
+    tstring: '__brycomp_tstring',
+    event: '__brycomp_event',
+    attach: '__brycomp_attach',
+    collection: '__brycomp_collection',
+    group: '__brycomp_group'
+};

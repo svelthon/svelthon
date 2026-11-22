@@ -1,6 +1,7 @@
 // How the DOM and Svelte read an attribute, by its name: the one table both
 // the markup pass, which sees the name where it is written, and the runtime,
 // which sees it only in a spread, consult.
+import { CALLS } from './template-names.js';
 
 // The boolean attributes, which the DOM reads for truth: on an element,
 // `disabled={[]}` has to be Python's false, as `{#if []}` is. Svelte's own list,
@@ -60,11 +61,11 @@ const BOOLEAN_ATTRIBUTE = new RegExp(`^(?:${[...BOOLEAN_ATTRIBUTES, ...BOOLEAN_P
 // third state besides: `until-found`, a string the element keeps.
 export const attributeWrapper = (name) =>
     name === 'class'
-        ? '__brycomp_class'
+        ? CALLS.class
         : /^hidden$/i.test(name)
-          ? '__brycomp_hidden'
+          ? CALLS.hidden
           : BOOLEAN_ATTRIBUTE.test(name)
-            ? '__brycomp_truthy'
+            ? CALLS.truthy
             : null;
 
 // An attribute of text, which a value alone between braces is written into as

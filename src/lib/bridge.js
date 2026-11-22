@@ -7,6 +7,7 @@ import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
 import BROWSER from 'esm-env/browser';
 import { attributeWrapper, textAttribute } from './attributes.js';
+import { CALLS } from './template-names.js';
 import { markTop, origins, codecLoaded, rebuilt, transporters, liveLoad } from './transport.js';
 
 // Held here as constants of this module: a binding imported is read through the
@@ -1667,9 +1668,9 @@ export const __brycomp_pybridge = {
             const wrapper = attributeWrapper(key);
             const present = read[key] !== NONE || unreflected(key);
             if (key[0] + key[1] === 'on') out[key] = event(read[key]);
-            else if (wrapper === '__brycomp_class') out[key] = __brycomp_pybridge.klass(read[key]);
-            else if (wrapper === '__brycomp_truthy' && !custom && present) out[key] = __brycomp_pybridge.truthy(read[key]);
-            else if (wrapper === '__brycomp_hidden' && !custom && present) out[key] = __brycomp_pybridge.hidden(read[key]);
+            else if (wrapper === CALLS.class) out[key] = __brycomp_pybridge.klass(read[key]);
+            else if (wrapper === CALLS.truthy && !custom && present) out[key] = __brycomp_pybridge.truthy(read[key]);
+            else if (wrapper === CALLS.hidden && !custom && present) out[key] = __brycomp_pybridge.hidden(read[key]);
             else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__brycomp_pybridge.bound(read[key]));
             else if (!custom && textAttribute(key)) {
                 out[key] = (later === true || later.includes(key.toLowerCase()) ? __brycomp_pybridge.heldAttr : __brycomp_pybridge.attr)(read[key]);
@@ -1687,10 +1688,10 @@ export const __brycomp_pybridge = {
     // its third state (`wrapper`). `value` is the Python value.
     element(tag, wrapper, value, name) {
         if (customTag(tag) || (value === NONE && !unreflected(name))) return __brycomp_pybridge.bound(value);
-        if (wrapper === '__brycomp_attr') return __brycomp_pybridge.attr(value);
-        if (wrapper === '__brycomp_heldAttr') return __brycomp_pybridge.heldAttr(value);
+        if (wrapper === CALLS.attr) return __brycomp_pybridge.attr(value);
+        if (wrapper === CALLS.heldAttr) return __brycomp_pybridge.heldAttr(value);
 
-        return wrapper === '__brycomp_hidden' ? __brycomp_pybridge.hidden(value) : __brycomp_pybridge.truthy(value);
+        return wrapper === CALLS.hidden ?__brycomp_pybridge.hidden(value) : __brycomp_pybridge.truthy(value);
     },
 
     // And a spread there, the same question asked of each key it gives, of the

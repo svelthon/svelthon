@@ -4,6 +4,7 @@
 // while the file next door needs `fs` and `path` and cannot be loaded there.
 import { parse } from 'svelte/compiler';
 import { attributeWrapper, textAttribute, truthBinding, BOOLEAN_ATTRIBUTES, BOOLEAN_PROPERTIES } from './attributes.js';
+import { CALLS } from './template-names.js';
 import {
     atomic,
     replaceLiterals,
@@ -327,7 +328,7 @@ function slices(inner) {
         const cuts = [-1, ...at, part.length];
         const bounds = cuts.slice(1).map((end, n) => part.slice(cuts[n] + 1, end).trim() || 'None');
 
-        return `__brycomp_slice(${bounds.join(', ')})`;
+        return `${CALLS.slice}(${bounds.join(', ')})`;
     });
 
     return written.includes(null) ? null : written.join(', ');
@@ -585,10 +586,10 @@ export function walrus(expression) {
                     // Python evaluates `=`'s, handed to a lambda whose body
                     // writes: an argument after the receiver, `(target().label
                     // := value())` called `target` first.
-                    if (found.name) return `__brycomp_assign("${pythonName(found.name)}", ${value})${clause}`;
+                    if (found.name) return `${CALLS.assign}("${pythonName(found.name)}", ${value})${clause}`;
 
                     const key = found.subscript ? walrus(found.key).trim() : found.key;
-                    const write = found.subscript ? '__brycomp_setitem' : '__brycomp_setattr';
+                    const write = found.subscript ? CALLS.setitem : CALLS.setattr;
 
                     return `(lambda __brycomp_given: ${write}(${walrus(found.object).trim()}, ${key}, __brycomp_given))((${value}))${clause}`;
                 });
@@ -666,7 +667,7 @@ function walrusFields(source, run) {
 
     const literal = out + source.slice(at, run.at(-1)[1]);
 
-    return handed ? `__brycomp_tstring(${literal}, ${JSON.stringify(expressions)}, ${JSON.stringify(labels)})` : literal;
+    return handed ? `${CALLS.tstring}(${literal}, ${JSON.stringify(expressions)}, ${JSON.stringify(labels)})` : literal;
 }
 
 // The fields of a t-string's own braces, by where each starts, and not those of
@@ -1013,7 +1014,7 @@ const SHORTHAND_ATTRIBUTE = new RegExp(`^${SHORT_NAME}$`, 'u');
 
 // The action the generated script defines for it. Named here and emitted there,
 // like `__brycomp_event`.
-const GROUP_ACTION = '__brycomp_group';
+const GROUP_ACTION = CALLS.group;
 
 // The setter's parameter. Generated, so it only has to avoid the author's names.
 const BOUND_VALUE = '__brycomp_value';
@@ -1159,11 +1160,11 @@ const HANDLER = /^on/;
 // The wrapper the generated script defines for handlers. Named here and emitted
 // there, so the two have to agree: it exists to carry the component's line
 // offset, which the markup pass runs too early to know.
-const EVENT_WRAPPER = '__brycomp_event';
+const EVENT_WRAPPER = CALLS.event;
 
 // And for `{@attach}`, whose return value has a consumer a handler's has not:
 // Svelte keeps it as the attachment's cleanup.
-const ATTACH_WRAPPER = '__brycomp_attach';
+const ATTACH_WRAPPER = CALLS.attach;
 
 // `class:many={…}` is read for truthiness, so it needs Python's: an empty list
 // is false here and true in JavaScript, exactly as in `{#if}`.
@@ -1184,7 +1185,7 @@ const onElement = (tag) =>
 // which Svelte sets to the value as it is (`set_custom_element_data`):
 // `open={rows}` on `<my-list>` was handed the truth of the list, where Svelte
 // hands the list. `class` stays Svelte's `clsx` there too.
-const TRUTH_WRAPPERS = new Set(['__brycomp_truthy', '__brycomp_hidden']);
+const TRUTH_WRAPPERS = new Set([CALLS.truthy, CALLS.hidden]);
 
 // The names an attribute of the table is spelled by.
 const TRUTH_NAMES = [...BOOLEAN_ATTRIBUTES, ...BOOLEAN_PROPERTIES, 'hidden'];
@@ -1787,7 +1788,7 @@ function unpackStarred(parts, call, names, tuple, unpack) {
     // (`starredRead`, `unpacked`), the rest being a list of its own.
     unpack.consts[slot] = {
         target: `[${targets.join(', ')}]`,
-        js: `__brycomp_pybridge.starred(${alias}, ${at}, ${after}, () => ${call(`__brycomp_unpack(${alias}, ${at}, ${after})`, '', '', 'python')})`,
+        js: `__brycomp_pybridge.starred(${alias}, ${at}, ${after}, () => ${call(`${CALLS.unpack}(${alias}, ${at}, ${after})`, '', '', 'python')})`,
         once: true,
         live: targets.flatMap((name, i) =>
             i !== at && DECLARED_NAME.test(name)
@@ -1837,7 +1838,7 @@ function unpackByKey(inside, call, names, tuple, unpack) {
 
             unpack.consts.push({
                 target,
-                read: `__brycomp_rest(${alias}, (${keys.map((one) => `${one}, `).join('')}))`,
+                read: `${CALLS.rest}(${alias}, (${keys.map((one) => `${one}, `).join('')}))`,
                 source: '',
                 lazy: false,
                 once: true
@@ -1896,7 +1897,7 @@ function unpackByKey(inside, call, names, tuple, unpack) {
         // by its name.
         unpack.consts[slot] = {
             target: walked,
-            read: `__brycomp_getattr(${alias}, ${named}${fallback === null ? '' : `, lambda: (${fallback})`})`,
+            read: `${CALLS.getattr}(${alias}, ${named}${fallback === null ? '' : `, lambda: (${fallback})`})`,
             source: fallback ?? (computed ? key.slice(1, -1) : ''),
             lazy: fallback !== null,
             ...(unpack.rows.has(walked) ? { once: true } : {})
@@ -2319,7 +2320,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
             }
         }
 
-        const iterable = call(walkedText, '__brycomp_seq', undefined, 'python');
+        const iterable = call(walkedText, CALLS.seq, undefined, 'python');
 
         declare(indexed ? [index] : []);
         return (
@@ -2351,7 +2352,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
     // Kept Python: Svelte only walks it, and every row goes back to Python
     // expressions. Converted, it would be a fresh list each render, its floats
     // numbers, and a row would have no identity left to key by.
-    const iterable = call(body.slice(0, at), '__brycomp_seq', undefined, 'python');
+    const iterable = call(body.slice(0, at), CALLS.seq, undefined, 'python');
     const target = keyed ? keyed[0] : named;
     const { pattern, unpack, consts } = destructured(target, declare, call, true, refuse, new Map());
 
@@ -2377,7 +2378,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
 }
 
 const walked = (rows, iterable, key) =>
-    `{const ${rows} = __brycomp_collection(() => ${iterable}${key === null ? '' : `, ${key}`})}`;
+    `{const ${rows} = ${CALLS.collection}(() => ${iterable}${key === null ? '' : `, ${key}`})}`;
 
 // The key of an `{#each}` is computed outside the block, from the pattern's own
 // names, and a name unpacked by key or around a star is a derived of the block.
@@ -2410,7 +2411,7 @@ const walked = (rows, iterable, key) =>
 const IDENTIFIER = /[\p{XID_Start}_$][\p{XID_Continue}$]*/gu;
 
 function eachKey(key, unpack, call) {
-    const keyed = call(key, '__brycomp_key', key, '', [], false);
+    const keyed = call(key, CALLS.key, key, '', [], false);
     const needed = new Set(freeNames(key).map(pythonName));
     const kept = new Set();
     let grew = true;
@@ -2547,7 +2548,7 @@ function assignedNames(rewritten) {
         if (Array.isArray(node)) return node.forEach(visit);
         if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
 
-        if (node instanceof $B.ast.Call && node.func instanceof $B.ast.Name && node.func.id === '__brycomp_assign') {
+        if (node instanceof $B.ast.Call && node.func instanceof $B.ast.Name && node.func.id === CALLS.assign) {
             const [first] = node.args;
 
             if (first instanceof $B.ast.Constant && typeof first.value === 'string') names.push(first.value);
@@ -3597,7 +3598,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         return pieces
             .map((one) =>
                 one.expression !== undefined
-                    ? call(one.expression, '__brycomp_text')
+                    ? call(one.expression, CALLS.text)
                     : JSON.stringify(attributeText(one.literal, quote))
             )
             .join(' + ');
@@ -3692,7 +3693,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
             const test = source.slice(offset(node.test.lineno, node.test.col_offset), offset(node.test.end_lineno, node.test.end_col_offset));
 
-            return `(${unmemoized(test, call(test, '__brycomp_truthy'))} ? ${body} : ${orelse})`;
+            return `(${unmemoized(test, call(test, CALLS.truthy))} ? ${body} : ${orelse})`;
         };
 
         return known(targetTree(source));
@@ -3746,7 +3747,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (shaped !== null) {
             const crossing = `__brycomp_pybridge.selectWrite(${shaped.key})`;
             const write = written(crossing);
-            const value = reading('__brycomp_bound', 'child');
+            const value = reading(CALLS.bound, 'child');
 
             return (
                 `${getter(`function ${shaped.read}() { return __brycomp_pybridge.selectRead(${value}, ${shaped.key}, ${shaped.read}); }`)}, ` +
@@ -3758,7 +3759,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
         const write = written(crossing);
         if (heldChild() !== null) {
-            return `${getter(`() => ${forChild(reading('__brycomp_bound', 'child'), 'scalar')}`)}, ${setter(write)}`;
+            return `${getter(`() => ${forChild(reading(CALLS.bound, 'child'), 'scalar')}`)}, ${setter(write)}`;
         }
 
         // A binding Svelte reads for truth, on an element: the Python value,
@@ -3773,7 +3774,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         }
 
         const read = multiple ? 'selection' : toPythonChild() ? 'child' : 'scalar';
-        const reader = `() => ${reading('__brycomp_bound', read)}`;
+        const reader = `() => ${reading(CALLS.bound, read)}`;
 
         // And so does what `<svelte:window>` and `<svelte:document>` bind: a
         // window scrolled on one axis had its other axis set back to the value
@@ -3834,7 +3835,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             one.thisFrom = value.start - 1;
             one.thisTo = value.end;
             region = { start, end };
-            const read = call(markup.slice(start, end), '__brycomp_bound');
+            const read = call(markup.slice(start, end), CALLS.bound);
             region = null;
             return { read, wrap: true };
         }
@@ -3850,14 +3851,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // or a class's name as the property of that name, undefined, and the
         // child was not there, and a child put in its place was not read
         // again.
-        if (rest.length > 0) return { read: call(one.name, '__brycomp_bound'), wrap: true };
+        if (rest.length > 0) return { read: call(one.name, CALLS.bound), wrap: true };
 
         // And a child held by a name, of the markup or of the script, is read
         // the same way: as Python reads the name, `<Ｃard />` being `Card`,
         // and handed over as Svelte takes a child, `None` as no child at all.
         // Read as JavaScript, the first was not defined and the second was
         // called.
-        if (local !== null) return { read: call(one.name, '__brycomp_bound'), wrap: true };
+        if (local !== null) return { read: call(one.name, CALLS.bound), wrap: true };
         if (where?.imported === undefined) return null;
 
         // A child named by its own file is known; an import read again is
@@ -3865,7 +3866,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (rest.length === 0 && (where.pythonChildren.has(head) || where.javascriptChildren.has(head))) return null;
         if (where.imported.has(head)) return { read: one.name, wrap: false };
 
-        return { read: call(one.name, '__brycomp_bound'), wrap: true };
+        return { read: call(one.name, CALLS.bound), wrap: true };
     };
     // Every name of the component as Python reads it, as a snippet's is
     // declared: `𝓢velthonElement0` is `SvelthonElement0` to Python. Its
@@ -3953,7 +3954,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         if (value.braced) {
             region = { start, end };
-            read = call(markup.slice(start, end), '__brycomp_bound');
+            read = call(markup.slice(start, end), CALLS.bound);
         } else {
             const open = markup.indexOf('{', start);
             const lone = loneInterpolation(markup, start - 1, closingBrace);
@@ -3962,7 +3963,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 start = open + 1;
                 end = lone - 1;
                 region = { start, end };
-                read = call(markup.slice(start, end), '__brycomp_bound');
+                read = call(markup.slice(start, end), CALLS.bound);
             } else {
                 region = { start, end };
                 read = quotedValue(markup.slice(start, end), value.quote);
@@ -4399,7 +4400,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const rendered = (inner, handed = false) => {
         refuseEmpty(inner);
 
-        return unmemoized(inner, call(inner, '__brycomp_text'), true, handed);
+        return unmemoized(inner, call(inner, CALLS.text), true, handed);
     };
 
     // What an attribute's value compiles to, by its name and the tag it is on.
@@ -4434,9 +4435,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             if (heldChild() !== null) {
                 const again = !callsAnything(inner) && readByMember(inner);
 
-                return `{${readThrough(inner, call(rewritten, '__brycomp_bound', inner, 'child'), (read) => forChild(read), again)}}`;
+                return `{${readThrough(inner, call(rewritten, CALLS.bound, inner, 'child'), (read) => forChild(read), again)}}`;
             }
-            if (isComponent(tag)) return `{${unmemoized(inner, call(rewritten, '__brycomp_bound', inner, toPythonChild() ? 'child' : ''), false, 'prop')}}`;
+            if (isComponent(tag)) return `{${unmemoized(inner, call(rewritten, CALLS.bound, inner, toPythonChild() ? 'child' : ''), false, 'prop')}}`;
 
             const adapted = `${EVENT_WRAPPER}(${call(rewritten, '', inner)})`;
 
@@ -4451,14 +4452,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             return calledAtTop(inner) ? `{${adapted}}` : `{${adapted} ?? undefined}`;
         }
 
-        if (CLASS_DIRECTIVE.test(name)) return `{${unmemoized(inner, call(inner, '__brycomp_truthy'))}}`;
+        if (CLASS_DIRECTIVE.test(name)) return `{${unmemoized(inner, call(inner, CALLS.truthy))}}`;
 
         // `--rate={value}` on a component is no prop of the child's: Svelte
         // writes it into the wrapper it makes around the child, a CSS custom
         // property JavaScript reads. Crossed as for a JavaScript child, whatever
         // the child is written in: kept Python for a Python child, a float was
         // written `[object Object]` into the style.
-        if (name.startsWith('--') && (isComponent(tag) || heldChild() !== null)) return `{${unmemoized(inner, call(inner, '__brycomp_bound'))}}`;
+        if (name.startsWith('--') && (isComponent(tag) || heldChild() !== null)) return `{${unmemoized(inner, call(inner, CALLS.bound))}}`;
 
         // `class`, which Svelte hands to `clsx`, and the boolean attributes,
         // which the DOM reads for truth: both read Python's truth instead.
@@ -4472,10 +4473,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // button enabled that Svelte's disabled, and the list itself, changed
         // in place, would have been the same value to Svelte.
         if (tag?.element !== undefined && TRUTH_WRAPPERS.has(wrapper)) {
-            return `{${readThrough(inner, call(inner, '__brycomp_boxed', undefined, 'python'), (boxed) => `__brycomp_pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${boxed}[0], ${JSON.stringify(name)})`)}}`;
+            return `{${readThrough(inner, call(inner, CALLS.boxed, undefined, 'python'), (boxed) => `__brycomp_pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${boxed}[0], ${JSON.stringify(name)})`)}}`;
         }
 
-        const known = wrapper === '__brycomp_class' && tag?.element === undefined ? knownClass(inner) : null;
+        const known = wrapper === CALLS.class && tag?.element === undefined ? knownClass(inner) : null;
 
         if (known !== null) return `{${known}}`;
         if (wrapper) return `{${onElement(tag) ? unmemoized(inner, call(inner, wrapper)) : call(inner, wrapper)}}`;
@@ -4498,7 +4499,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             const kind = name === 'value' ? 'scalar' : '';
             const again = !callsAnything(inner) && readByMember(inner);
 
-            return `{${readThrough(inner, call(inner, '__brycomp_bound', undefined, 'child'), (read) => forChild(read, kind), again)}}`;
+            return `{${readThrough(inner, call(inner, CALLS.bound, undefined, 'child'), (read) => forChild(read, kind), again)}}`;
         }
 
         const grouped = !isComponent(tag) && tag !== null && tagNames(markup, tag.start).has('bind:group');
@@ -4518,13 +4519,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (kind === '' && onElement(tag) && !custom(tag) && textAttribute(name)) {
             const words = tagWords(markup, tag.start);
             const held = words.lastIndexOf(SPREAD_WORD) > words.indexOf(name.toLowerCase());
-            const wrapper = held ? '__brycomp_heldAttr' : '__brycomp_attr';
+            const wrapper = held ? CALLS.heldAttr : CALLS.attr;
             const kept = held ? slotted(tag) : null;
             const keep = kept === null ? (read) => read : keeping(kept, name.toLowerCase());
 
             if (tag.element !== undefined) {
                 const through = (boxed) => keep(`__brycomp_pybridge.element(${tag.element}, "${wrapper}", ${boxed}[0], ${JSON.stringify(name)})`);
-                const read = call(inner, '__brycomp_boxed', undefined, 'python');
+                const read = call(inner, CALLS.boxed, undefined, 'python');
 
                 return `{${readThrough(inner, read, through)}}`;
             }
@@ -4532,7 +4533,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             return `{${kept === null ? unmemoized(inner, call(inner, wrapper)) : readThrough(inner, call(inner, wrapper), keep)}}`;
         }
 
-        const read = call(inner, '__brycomp_bound', undefined, kind);
+        const read = call(inner, CALLS.bound, undefined, kind);
 
         return `{${onElement(tag) ? unmemoized(inner, read) : isComponent(tag) ? unmemoized(inner, read, false, 'prop') : read}}`;
     };
@@ -4793,14 +4794,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         const after = tagWords(markup, end + 1);
                         const later = after.includes(SPREAD_WORD) ? null : JSON.stringify(after);
                         const spreadWrapper = !onElement(tag)
-                            ? '__brycomp_spread'
+                            ? CALLS.spread
                             : !grouped && custom(tag)
-                              ? '__brycomp_spreadCustom'
+                              ? CALLS.spreadCustom
                               : later !== null
-                                ? `__brycomp_spreadBefore(${later}, ${grouped ? 'True' : 'False'})`
+                                ? `${CALLS.spreadBefore}(${later}, ${grouped ? 'True' : 'False'})`
                                 : grouped
-                                  ? '__brycomp_spreadChoice'
-                                  : '__brycomp_spreadElement';
+                                  ? CALLS.spreadChoice
+                                  : CALLS.spreadElement;
 
                         // And on a `<svelte:element>` whose name is known as it
                         // renders, each key asked of that name, as an attribute
@@ -4840,17 +4841,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // boolean, `translate`, which took it for true. An
                         // element with one spread alone, and what is written
                         // after the last, are read as they were.
-                        const plain = onElement(tag) && heldChild() === null && !toPythonChild() && spreadWrapper !== '__brycomp_spreadCustom';
+                        const plain = onElement(tag) && heldChild() === null && !toPythonChild() && spreadWrapper !== CALLS.spreadCustom;
                         const kept = plain && (later === null || tag.slot !== undefined) ? slotted(tag) : null;
                         const keep = kept === null ? (read) => read : later === null ? keeping(kept, null) : settling(kept, later);
 
                         out +=
                             heldChild() !== null
-                                ? `{...${readThrough(spreadExpression, call(spreadExpression, '__brycomp_spreadEntries', undefined, 'python'), (entries) => forChild(entries, 'spread'))}}`
+                                ? `{...${readThrough(spreadExpression, call(spreadExpression, CALLS.spreadEntries, undefined, 'python'), (entries) => forChild(entries, 'spread'))}}`
                                 : toPythonChild()
-                                  ? `{...${unmemoized(spreadExpression, call(spreadExpression, '__brycomp_spreadPython', undefined, 'python'), false, 'spread')}}`
+                                  ? `{...${unmemoized(spreadExpression, call(spreadExpression, CALLS.spreadPython, undefined, 'python'), false, 'spread')}}`
                                   : tag?.element !== undefined
-                                    ? `{...${(kept !== null && later !== null ? keptRead : readThrough)(spreadExpression, call(spreadExpression, '__brycomp_spreadEntries', undefined, 'python'), (entries) => keep(`__brycomp_pybridge.elementSpread(${tag.element}, ${entries}, __brycomp_event, ${grouped}, ${later ?? 'true'})`))}}`
+                                    ? `{...${(kept !== null && later !== null ? keptRead : readThrough)(spreadExpression, call(spreadExpression, CALLS.spreadEntries, undefined, 'python'), (entries) => keep(`__brycomp_pybridge.elementSpread(${tag.element}, ${entries}, ${CALLS.event}, ${grouped}, ${later ?? 'true'})`))}}`
                                     : kept !== null
                                       ? `{...${(later !== null ? keptRead : readThrough)(spreadExpression, call(spreadExpression, spreadWrapper), keep)}}`
                                       : onElement(tag) || isComponent(tag)
@@ -5103,7 +5104,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // so it is compiled before the block's scope opens: a snippet of
             // the body, preloaded into that scope, is not a name the head sees.
             if (opens('if')) {
-                const condition = call(opened.rest, '__brycomp_truthy');
+                const condition = call(opened.rest, CALLS.truthy);
 
                 push([]);
                 out += `{#if ${condition}}`;
@@ -5126,7 +5127,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // Svelte re-creates the block when the value changes, by
                 // identity: `__brycomp_key` keeps it for a container and an instance,
                 // and gives a value rebuilt each time its repr().
-                const keyed = call(opened.rest, '__brycomp_key');
+                const keyed = call(opened.rest, CALLS.key);
 
                 push([]);
                 out += `{#key ${keyed}}`;
@@ -5264,7 +5265,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             };
 
             const elseIf = /^:else\s+if\s/.test(trimmed);
-            const condition = elseIf ? call(trimmed.replace(/^:else\s+if\s/, ''), '__brycomp_truthy') : null;
+            const condition = elseIf ? call(trimmed.replace(/^:else\s+if\s/, ''), CALLS.truthy) : null;
 
             seeded();
 
@@ -5287,7 +5288,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             if (holds('html')) {
                 // Python's text, but for the `TrustedHTML` a policy made
                 // (`__brycomp_pybridge.html`).
-                out += `{@html ${call(written.rest, '__brycomp_html')}}`;
+                out += `{@html ${call(written.rest, CALLS.html)}}`;
             } else if (holds('render')) {
                 // The snippet itself is a JavaScript function and stays one.
                 // Its call is the last group of the expression (`renderedCall`),
