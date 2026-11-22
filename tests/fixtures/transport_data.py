@@ -189,6 +189,10 @@ def act(event):
     return {"zipped": zipped}
 
 
+def edited(event):
+    return {"label": "from server", "pair": (1, 2), "other": 3}
+
+
 # An instance whose reduction loses what was changed after it was made: what
 # the browser rebuilds says "kept", the original "changed".
 def changed():
@@ -273,7 +277,7 @@ def hooked():
     return {"loaded": Loaded(3), "upper": upper}
 
 
-actions = {"default": act, "lossy": lossy, "loaded": loaded}
+actions = {"default": act, "lossy": lossy, "loaded": loaded, "edited": edited}
 
 
 def remote_lossy():

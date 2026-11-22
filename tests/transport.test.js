@@ -581,6 +581,19 @@ test('an action’s answer crosses as it was returned, whatever the page read of
     expect(shown(viaScript({ form: answer }).form)).toBe("zip:[(2, 'b'), (3, 'c')]");
 });
 
+// An answer JavaScript edits before Python reads it, as a page's `enhance` may:
+// Python reads what JavaScript left, a value replaced in its place, a key
+// removed left out and one added after them, the others as they crossed.
+test('an action’s answer JavaScript edited is, to Python, what JavaScript left of it', async () => {
+    const answer = viaScript({ form: await routeActions(pyBind(actions), 'actions — transport').edited({}) }).form;
+
+    answer.label = 'from client';
+    delete answer.other;
+    answer.added = 1;
+
+    expect([answer.label, shown(answer)]).toEqual(['from client', "dict:{'label': 'from client', 'pair': (1, 2), 'added': 1}"]);
+});
+
 // `page.data` read from Python before the page has read its own `data`: the
 // same dict, as an argument and as an attribute Python reads off JavaScript's
 // `page`.

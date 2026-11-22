@@ -96,12 +96,13 @@ function top(names, dict, marked, trusted) {
     let rebuilt;
     const resolve = () => (made ??= codec()?.decodeTop(names, dict, true, trusted) ?? copiedTop(dict, (at) => python().entries()[at][2]));
     const pojo = {};
+    const getters = names.map((_, at) => () => resolve().value(at));
 
     // No function made here names `pojo`: it would be kept with every function
     // made here, the one the queue holds until the codec loads among them.
     for (const [at, name] of names.entries()) {
         Object.defineProperty(pojo, name, {
-            get: () => resolve().value(at),
+            get: getters[at],
             set(value) {
                 Object.defineProperty(this, name, { value, writable: true, enumerable: true, configurable: true });
             },
@@ -110,10 +111,12 @@ function top(names, dict, marked, trusted) {
         });
     }
 
-    // JavaScript may have read the copies; Python reads the dict.
+    // JavaScript may have read the copies, and written over the plain object;
+    // Python reads the dict, with what JavaScript left there at its first read.
     const python = () => (rebuilt ??= resolve().dict === undefined ? codec().decodeTop(names, dict, false, trusted) : resolve());
+    const left = new WeakRef(pojo);
 
-    adopt(pojo, () => python().dict());
+    adopt(pojo, () => python().dict(edits(left.deref(), names, getters)));
 
     // Each entry as JavaScript read it, a copy among them, which SvelteKit's
     // merge holds.
@@ -121,6 +124,21 @@ function top(names, dict, marked, trusted) {
 
     return marked ? markTop(pojo, { entries }) : pojo;
 }
+
+// What JavaScript left of a top's plain object, as SvelteKit's merge is read
+// (`routeData`): for each entry, nothing while its own getter still reads it,
+// `{ value }` for one JavaScript wrote, null for one it deleted; and the names
+// it added, with their values.
+const edits = (object, names, getters) => ({
+    entries: names.map((name, at) => {
+        const own = Object.getOwnPropertyDescriptor(object, name);
+
+        return own === undefined ? null : own.get === getters[at] ? undefined : { value: object[name] };
+    }),
+    added: Object.keys(object)
+        .filter((name) => !names.includes(name))
+        .map((name) => [name, object[name]])
+});
 
 // `trusted` for what the server reads back under its own signature
 // (`transport-server.js`): rebuilt in full, where anything else it reads came

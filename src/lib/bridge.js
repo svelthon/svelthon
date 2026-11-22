@@ -3632,7 +3632,23 @@ const codec = {
 
                     return [names[at], key, held(at), js];
                 }),
-            dict: () => (items.some(([, one], at) => held(at) !== one) ? pyDict(items.map(([key], at) => [key, held(at)])) : dict)
+            // With what JavaScript left of the plain object (`edits`): a value
+            // it wrote in its entry's place, an entry it deleted left out, a
+            // name it added after the entries.
+            dict: (left) => {
+                const writes = items.flatMap(([key], at) => {
+                    const edit = left?.entries[at];
+
+                    return edit === null ? [] : [[key, edit === undefined ? held(at) : pyBind(edit.value)]];
+                });
+                const added = left?.added ?? [];
+
+                writes.push(...added.map(([name, value]) => [name, pyBind(value)]));
+
+                return added.length === 0 && writes.length === items.length && writes.every(([, one], at) => one === items[at][1])
+                    ? dict
+                    : pyDict(writes);
+            }
         };
     },
     // A plain object Python reads as the value it stands for.

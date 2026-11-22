@@ -1503,7 +1503,10 @@ A coroutine SvelteKit streams is awaited in the browser as on the server, its
 result as it was: `1.0` a float, an instance of your class an instance of it.
 An action's answer crosses as the action returned it, whatever the page read of
 it while it rendered, an iterator it walked included; and `page.data` read from
-Python is the same dict as `data`.
+Python is the same dict as `data`. What the page writes over an action's or a
+remote function's answer before Python reads it, a value replaced, a key
+deleted or added, Python reads too; once Python has read it, the dict is its
+own, and a later write stays JavaScript's.
 
 A page in JavaScript reads the same data through views, as a prop a Python
 parent hands it; one with no Python at all loads no engine for it, and reads
@@ -1871,7 +1874,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 216 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 217 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

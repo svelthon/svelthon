@@ -1571,7 +1571,10 @@ le serveur, son résultat tel qu'il était : `1.0` un float, une instance de
 votre classe une instance de celle-ci. La réponse d'une action traverse telle
 que l'action l'a rendue, quoi que la page en ait lu pendant son rendu, un
 itérateur qu'elle a parcouru compris ; et `page.data` lu depuis Python est le
-même dict que `data`.
+même dict que `data`. Ce que la page écrit sur la réponse d'une action ou d'une
+fonction distante avant que Python la lise, une valeur remplacée, une clé
+supprimée ou ajoutée, Python le lit aussi ; une fois que Python l'a lue, le
+dict est le sien, et une écriture ultérieure reste celle de JavaScript.
 
 Une page en JavaScript lit les mêmes données par des vues, comme une prop qu'un
 parent Python lui passe ; une page sans aucun Python ne charge aucun moteur pour
@@ -1913,7 +1916,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 216 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 217 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
