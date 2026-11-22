@@ -7,6 +7,8 @@ import { render } from 'svelte/server';
 import AttributeText from './fixtures/AttributeText.svelte';
 import AttributeTextRaises from './fixtures/AttributeTextRaises.svelte';
 import AttributeTextRaisesOn from './fixtures/AttributeTextRaisesOn.svelte';
+import AttributeNestedOuter from './fixtures/AttributeNestedOuter.svelte';
+import AttributeNestedInner from './fixtures/AttributeNestedInner.svelte';
 
 // And as the browser does, a value an attribute written after it overrides is
 // never written, an enumerated attribute keeps its text, and a `defaultValue`,
@@ -60,4 +62,12 @@ test.for([
 
     if (raises) expect(rendered).toThrow(/ValueError: caption unavailable/);
     else expect(rendered).not.toThrow();
+});
+
+// And a page rendered in a spread's value leaves the element its own.
+test("a page rendered in a spread's value leaves the element its own attributes, on a server", () => {
+    const describe = () => ({ 'data-preview': render(AttributeNestedInner).body.includes('title="Chosen"') ? 'Chosen' : 'missing' });
+    const { body } = render(AttributeNestedOuter, { props: { describe } });
+
+    expect(body).toMatch(/<p title="Outer caption" data-preview="Chosen">Outer<\/p>/);
 });

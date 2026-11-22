@@ -7,6 +7,8 @@ import { mount, flushSync } from './mounted.js';
 import AttributeText from './fixtures/AttributeText.svelte';
 import AttributeTextRaises from './fixtures/AttributeTextRaises.svelte';
 import AttributeTextRaisesOn from './fixtures/AttributeTextRaisesOn.svelte';
+import AttributeNestedOuter from './fixtures/AttributeNestedOuter.svelte';
+import AttributeNestedInner from './fixtures/AttributeNestedInner.svelte';
 
 test.for([
     ['list', 'title', '[1, 2]'],
@@ -113,4 +115,25 @@ test.for([
 
     if (raises) expect(mounted).toThrow(/ValueError: caption unavailable/);
     else expect(mounted).not.toThrow();
+});
+
+// What an element keeps of its attributes is its own: a page mounted in a
+// spread's value, whose spread overrode a text that raised, left the outer
+// element raising it.
+test("a page mounted in a spread's value leaves the element its own attributes", () => {
+    const describe = () => {
+        const inner = document.createElement('div');
+
+        mount(AttributeNestedInner, { target: inner });
+
+        return { 'data-preview': inner.querySelector('p').title };
+    };
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(AttributeNestedOuter, { target, props: { describe } });
+    flushSync();
+
+    const p = target.querySelector('p');
+
+    expect([p.title, p.dataset.preview]).toEqual(['Outer caption', 'Chosen']);
 });

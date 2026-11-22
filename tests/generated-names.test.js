@@ -56,6 +56,9 @@ const MARKUP_LOCAL = new Set([
     '__brycomp_rows_',
     // What a `{@debug}` hands Svelte's under each name it logs.
     '__brycomp_debugged_',
+    // The row an element's instance keeps of what its attributes and spreads
+    // gave, which its last spread settles, declared beside it.
+    '__brycomp_slot_',
     // A stand-in used by the first, throwaway walk that only collects snippet
     // names; nothing it returns is emitted.
     '__brycomp_probe',
