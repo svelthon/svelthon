@@ -2056,8 +2056,7 @@ où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
 L'autre prix est au chargement : 290 Ko gzip, runtime Brython compris, et
-**0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
-le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
+**0,12 s jusqu'au contenu de la démo** en production, cache vide. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.
 
 ## Reste à faire

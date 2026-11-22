@@ -1980,8 +1980,7 @@ Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
 not feel.
 
 Loading is the other price: 290 KB gzip, the Brython runtime included, and
-**0.12 s to the demo's content** in production with a cold cache, 0.33 s with
-the processor slowed four times, as a modest laptop's is. Paid once per
+**0.12 s to the demo's content** in production with a cold cache. Paid once per
 session, not per page, since the app never reloads.
 
 ## Not done yet
