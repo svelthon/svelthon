@@ -186,8 +186,8 @@ And the module's namespace is read, never written, through its doors:
 is, a state, a derived, a prop, an export, the compiler decides from your text,
 so a name bound by writing it there, `globals()["count"] = 0`,
 `globals().update(…)` or `del globals()["count"]`, is refused at its line; at
-run time a door handed to a function refuses the write as well, with a
-`TypeError`, as an ES module's namespace does. A name is bound by assigning it,
+run time a door handed to a function, or reached by an attribute, refuses the
+write as well, with a `TypeError`, as an ES module's namespace does. A name is bound by assigning it,
 `global` included, and names made by computation are the keys of a dict of
 your own. Reading stays as Python has it: `globals()["count"]`, `.get`, `in`, a
 walk; and another module writes a name the module's text has,

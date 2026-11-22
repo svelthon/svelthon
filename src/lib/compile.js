@@ -31,6 +31,7 @@ import {
     scopeIn,
     isGlobalScope,
     moduleBinds,
+    builtinIn,
     globalReads,
     children,
     declaredExports,
@@ -132,30 +133,30 @@ function refuseTemplateWalrus(ast, table, source, ranges) {
 // A module's namespace is read and never written through its doors, as the
 // bridge makes them at run time (`host.readOnlyNamespace`): what each name is,
 // a cell, a key of a store, a prop, is decided from the text, and a write
-// through `globals()`, `vars()` or `locals()` at the module's level, a
-// function's `__globals__`, a frame's `f_globals` or `builtins.globals()` binds
-// or removes a name the text does not show. Refused at its line, a key written
-// or deleted and a
-// method that writes; a read, `[k]`, `get`, `in`, a walk, and a door handed to a
-// function, which can only read it, stay.
+// through `globals()`, `vars()` or `locals()` at the module's level binds or
+// removes a name the text does not show. Refused at its line, a key written or
+// deleted and a method that writes, where the name is the builtin, which no
+// scope binds (`builtinIn`): a parameter named `globals`, or a `vars` the
+// author defined, is the author's, and was refused. What reaches a door by an
+// attribute, a function's `__globals__`, a frame's `f_globals`,
+// `builtins.globals()`, is an object the text cannot tell, and is refused as it
+// is written, at run time. A read, `[k]`, `get`, `in`, a walk, and a door
+// handed to a function, which can only read it, stay.
 const NAMESPACE_WRITES = new Set(['pop', 'popitem', 'update', 'setdefault', 'clear', '__setitem__', '__delitem__']);
 
-function refuseNamespaceWrites(tree, source, ranges, lineOffset) {
+function refuseNamespaceWrites(tree, table, source, ranges, lineOffset) {
     const ast = $B.ast;
-    const scopes = [ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
+    const builtin = builtinIn(table, moduleBinds(table));
     const literal = (node) => (node instanceof ast.Constant && typeof node.value === 'string' ? node.value : null);
-    const door = (node, top) => {
-        if (node instanceof ast.Call && node.args.length === 0 && node.keywords.length === 0) {
-            const { func } = node;
+    const door = (node, scope) => {
+        if (!(node instanceof ast.Call) || node.args.length > 0 || node.keywords.length > 0 || !(node.func instanceof ast.Name)) return null;
 
-            if (func instanceof ast.Name && (func.id === 'globals' || (top && (func.id === 'vars' || func.id === 'locals')))) return `${func.id}()`;
-            if (func instanceof ast.Attribute && func.attr === 'globals' && func.value instanceof ast.Name && func.value.id === 'builtins') return 'builtins.globals()';
-        }
+        const { id } = node.func;
 
-        return node instanceof ast.Attribute && (node.attr === '__globals__' || node.attr === 'f_globals') ? `….${node.attr}` : null;
+        return (id === 'globals' || (scope === null && (id === 'vars' || id === 'locals'))) && builtin(id, scope) ? `${id}()` : null;
     };
     // `door.update(…)`, or as the markup spells it, `__brycomp_getattr(door, "update")(…)`.
-    const method = (node, top) => {
+    const method = (node, scope) => {
         if (!(node instanceof ast.Call)) return null;
 
         const { func } = node;
@@ -165,46 +166,35 @@ function refuseNamespaceWrites(tree, source, ranges, lineOffset) {
                 : func instanceof ast.Call && func.func instanceof ast.Name && func.func.id === RUNTIME.readAttr && func.args.length === 2
                   ? [func.args[0], literal(func.args[1])]
                   : [null, null];
-        const found = NAMESPACE_WRITES.has(name) ? door(opened, top) : null;
+        const found = NAMESPACE_WRITES.has(name) ? door(opened, scope) : null;
 
         return found === null ? null : `${found}.${name}(…)`;
     };
-    // The line of the script, or of the markup an expression was written at.
-    const at = (node, template) => {
-        if (!template) return [node.lineno + lineOffset, undefined];
-
+    // The line of the markup an expression was written at, or of the script.
+    const at = (node) => {
         const range = ranges.find(([from, to]) => node.lineno >= from && node.lineno <= to);
 
-        return range === undefined ? [undefined, undefined] : [range[2], range[3]];
-    };
-    const visit = (node, top, template) => {
-        if (Array.isArray(node)) return node.forEach((one) => visit(one, top, template));
-        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
-
-        const written = node instanceof ast.Subscript && !(node.ctx instanceof ast.Load) ? door(node.value, top) : null;
-        const spelling = written === null ? method(node, top) : node.ctx instanceof ast.Del ? `del ${written}[…]` : `${written}[…] = …`;
-
-        if (spelling !== null) {
-            const [line, column] = at(node, template);
-            const where = line === undefined ? '' : ` (${source}:${line}${column === undefined ? '' : `:${column + 1}`})`;
-
-            throw refuse(
-                `svelthon — \`${spelling}\` writes the module's namespace, which its doors read and never write${where}: ` +
-                    `a name is bound by assigning it in the module's text, \`name = …\`, and names made by ` +
-                    `computation are the keys of a dict of your own.`,
-                source,
-                line,
-                column
-            );
-        }
-
-        const inner = scopes.some((kind) => node instanceof kind);
-        const expression = node instanceof ast.FunctionDef && node.name.startsWith(EXPR_PREFIX);
-
-        for (const field of node.constructor._fields) visit(node[field], top && !inner, template || expression);
+        return range === undefined ? [node.lineno + lineOffset, undefined] : [range[2], range[3]];
     };
 
-    visit(tree.body, true, false);
+    walkScoped(tree.body, (node, scope) => {
+        const written = node instanceof ast.Subscript && !(node.ctx instanceof ast.Load) ? door(node.value, scope) : null;
+        const spelling = written === null ? method(node, scope) : node.ctx instanceof ast.Del ? `del ${written}[…]` : `${written}[…] = …`;
+
+        if (spelling === null) return;
+
+        const [line, column] = at(node);
+        const where = line === undefined ? '' : ` (${source}:${line}${column === undefined ? '' : `:${column + 1}`})`;
+
+        throw refuse(
+            `svelthon — \`${spelling}\` writes the module's namespace, which its doors read and never write${where}: ` +
+                `a name is bound by assigning it in the module's text, \`name = …\`, and names made by ` +
+                `computation are the keys of a dict of your own.`,
+            source,
+            line,
+            column
+        );
+    });
 }
 
 
@@ -3228,7 +3218,7 @@ function compile(
     ({ src } = compiled);
 
     if (component) refuseTemplateWalrus(root._ast, table, source, exprLines);
-    refuseNamespaceWrites(root._ast, source, exprLines, lineOffset);
+    refuseNamespaceWrites(root._ast, table, source, exprLines, lineOffset);
 
     const foreign = foreignNames([...jsImported, ...jsNames]);
 

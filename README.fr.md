@@ -191,8 +191,8 @@ fonction, le `f_globals` d'un cadre et le `__dict__` d'un module. Ce qu'est
 chaque nom, un état, un dérivé, un prop, un export, le compilateur le décide
 d'après votre texte : un nom lié en l'écrivant là, `globals()["count"] = 0`,
 `globals().update(…)` ou `del globals()["count"]`, est refusé à sa ligne ; à
-l'exécution, une porte passée à une fonction refuse aussi l'écriture, par une
-`TypeError`, comme le namespace d'un module ES. Un nom se lie en l'affectant,
+l'exécution, une porte passée à une fonction, ou atteinte par un attribut,
+refuse aussi l'écriture, par une `TypeError`, comme le namespace d'un module ES. Un nom se lie en l'affectant,
 `global` compris, et des noms faits par calcul sont les clés d'un dict à vous.
 La lecture reste celle de Python : `globals()["count"]`, `.get`, `in`, un
 parcours ; et un autre module écrit un nom que le texte du module a,

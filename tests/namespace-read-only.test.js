@@ -1,11 +1,10 @@
 // A module's namespace is read and never written through its doors: what each
 // name is, a cell, a key of a store, a prop, is decided from the text, so a
-// write through `globals()`, `vars()` or `locals()` at the module's level, a
-// function's `__globals__`, a frame's `f_globals` or `builtins.globals()` is
-// refused at its line, and
-// at run time a door refuses the write no text shows, a namespace handed to a
-// function that writes into it. A read stays, and so do `vars()` and
-// `locals()` in a function, which are the function's own.
+// write through `globals()`, `vars()` or `locals()` at the module's level is
+// refused at its line, and at run time a door refuses the write no text
+// shows: a namespace handed to a function that writes into it, a function's
+// `__globals__`, a frame's `f_globals`, `builtins.globals()`. A read stays, and
+// so do `vars()` and `locals()` in a function, which are the function's own.
 import { test, expect } from 'vitest';
 import { preprocess } from 'svelte/compiler';
 import { python } from '../src/lib/svelthon.js';
@@ -13,6 +12,7 @@ import { mount, flushSync } from './mounted.js';
 import NamespaceHanded from './fixtures/NamespaceHanded.svelte';
 import * as Target from './fixtures/attribute_target.py';
 import { writes } from './fixtures/attribute_writer.py';
+import { attempts, ordinary } from './fixtures/namespace_doors.py';
 
 const FILE = 'src/App.svelte';
 const compiled = (script, markup = '<p>{x}</p>') =>
@@ -29,12 +29,30 @@ test.for([
     ['globals().clear()', 'globals().clear(…)', 3],
     ['vars()["y"] = 2', 'vars()[…] = …', 3],
     ['locals()["y"] = 2', 'locals()[…] = …', 3],
-    ['def f():\n    globals()["y"] = 2', 'globals()[…] = …', 4],
-    ['def f():\n    pass\nf.__globals__["y"] = 2', '….__globals__[…] = …', 5],
-    ['try:\n    raise ValueError()\nexcept ValueError as error:\n    error.__traceback__.tb_frame.f_globals["y"] = 2', '….f_globals[…] = …', 6],
-    ['import builtins\nbuiltins.globals()["y"] = 2', 'builtins.globals()[…] = …', 4]
+    ['def f():\n    globals()["y"] = 2', 'globals()[…] = …', 4]
 ])('`%s` is refused on its line', async ([script, spelling, line]) => {
     await expect(compiled(script)).rejects.toThrow(refusal(spelling, line));
+});
+
+// Where the name is the builtin, which no scope binds: a parameter named
+// `globals`, a `vars` of the module's own and an instance's `f_globals` are the
+// author's, and were refused.
+test.for([
+    'def apply(globals):\n    globals().update(status="published")',
+    'def vars():\n    return {}\nvars()["a"] = 1',
+    'class Record:\n    pass\nsnapshot = Record()\nsnapshot.f_globals = {}\nsnapshot.f_globals["a"] = 1'
+])('`%s` compiles', async (script) => {
+    await expect(compiled(script)).resolves.toBeTruthy();
+});
+
+// And they write as Python does, where what an attribute reaches, a function's
+// `__globals__`, a frame's `f_globals`, `builtins.globals()`, is refused as it
+// is written.
+test('a door an attribute reaches refuses the write at run time, and what only looks like one writes', () => {
+    expect([[...attempts], [...ordinary]]).toEqual([
+        ['refused', 'refused', 'refused'],
+        ['published', 'own', 1]
+    ]);
 });
 
 test('a write through a door in the markup is refused at the markup', async () => {
