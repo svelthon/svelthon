@@ -232,7 +232,7 @@ export {
     plainData
 };
 
-export { refusal, pyTypeName, keywordsOf, parseKeywords, pyJsonParse } from 'bryntime';
+export { refusal, pyTypeName, keywordsOf, parseKeywords, pyJsonParse, templateText } from 'bryntime';
 
 // The name this project's author knows, which signs every refusal the crossing
 // makes, as every other refusal here is signed.

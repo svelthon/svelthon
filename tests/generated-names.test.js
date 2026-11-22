@@ -136,16 +136,17 @@ const published = (compiler) => {
 //
 // Plus what the compiler writes into the template's functions itself: every dot
 // of the markup becomes a call there, written by Brycomp's `templateDots` under
-// the names the compiler's runtime gives `readAttr` and `writeAttr`, so the
-// markup pass never spells them. Read off those two entries of `compile.js`,
-// so a name it stops giving leaves this list as well.
-const dots = () => [...read('compile.js').matchAll(/^\s*(?:readAttr|writeAttr): '(__\w+)',?$/gm)].map((one) => one[1]);
+// the names the compiler's runtime gives `readAttr` and `writeAttr`, and a
+// t-string it rewrote under `templateText`'s, so the markup pass never spells
+// them. Read off those entries of `compile.js`, so a name it stops giving
+// leaves this list as well.
+const dots = () => [...read('compile.js').matchAll(/^\s*(?:readAttr|writeAttr|templateText): '(__\w+)',?$/gm)].map((one) => one[1]);
 
 const written = (markup) =>
     new Set([...[...markup.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]), ...dots()]);
 
-test('the dots of the template are written under two names of the runtime', () => {
-    expect(dots()).toEqual(['__brycomp_getattr', '__brycomp_setattr']);
+test('the dots of the template are written under three names of the runtime', () => {
+    expect(dots()).toEqual(['__brycomp_getattr', '__brycomp_setattr', '__brycomp_tstring']);
 });
 
 // The markup pass, with the table of attribute wrappers it reads: `__brycomp_class`

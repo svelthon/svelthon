@@ -1041,7 +1041,8 @@ const RUNTIME = {
     unpackStarred: '__brycomp_unpack',
     writeAttr: '__brycomp_setattr',
     writeItem: '__brycomp_setitem',
-    pySlice: '__brycomp_slice'
+    pySlice: '__brycomp_slice',
+    templateText: '__brycomp_tstring'
 };
 
 // What stands in for the standard modules an author reaches for first: a
@@ -1091,7 +1092,8 @@ const ADAPTERS = {
     __brycomp_unpack: '__brycomp_unpack',
     __brycomp_setattr: '__brycomp_setattr',
     __brycomp_setitem: '__brycomp_setitem',
-    __brycomp_slice: '__brycomp_slice'
+    __brycomp_slice: '__brycomp_slice',
+    __brycomp_tstring: '__brycomp_tstring'
 };
 
 // What Brycomp is told of the framework it compiles for, by the interface its
@@ -2240,8 +2242,9 @@ function preamble(c) {
             ...(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['pyHook'] : []),
             ...(c.effects.some((e) => e.root) ? ['laterRoot'] : []),
             // Three that keep the spelling the markup pass emits, and the read
-            // half of the dot, which `templateDots` writes.
-            'group', 'readAttr', 'restOf', 'unpackStarred', 'writeAttr', 'writeItem', 'pySlice',
+            // half of the dot, which `templateDots` writes, with the text of a
+            // t-string it rewrote.
+            'group', 'readAttr', 'restOf', 'unpackStarred', 'writeAttr', 'writeItem', 'pySlice', 'templateText',
             ...(c.templateLine === undefined ? [] : ['templateFrom']),
             ...(c.store ? [] : ['fileLines']),
             ...(c.jsImported.length ? ['readOnlyImport'] : [])
