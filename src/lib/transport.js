@@ -252,9 +252,11 @@ function copied(made, memo) {
         case 'f':
         case 'j':
             return made[1];
-        // A coroutine's result, streamed pickled: the promise of its copy.
+        // A coroutine's result, streamed pickled: the promise of what it
+        // decodes to when it comes, a copy Python reads as the value it
+        // stands for, as one handed at once.
         case 'a':
-            return keep(Promise.resolve(made[1]).then((structure) => copied(structure, new Map())));
+            return keep(Promise.resolve(made[1]).then((structure) => decode(structure)));
         // One copy for the one complex, wherever it is held, as a list's.
         case 'c':
             return keep(Object.freeze({ real: made[1], imag: made[2] }));

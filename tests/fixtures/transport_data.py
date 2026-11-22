@@ -1,6 +1,6 @@
 # What a server hands a page, through SvelteKit's transport (`transport.js`).
 __all__ = [
-    "values", "shared_complex", "load", "layout", "merge_layout", "merge_section", "merge_page", "walked", "pointed", "streamed", "actions", "one", "two", "callables", "lossy", "unpicklable",
+    "values", "shared_complex", "load", "layout", "merge_layout", "merge_section", "merge_page", "walked", "pointed", "streamed", "streamed_point", "actions", "one", "two", "callables", "lossy", "unpicklable",
     "remote_lossy", "remote_batch", "remote_live", "remote_hook", "bumped", "kept", "stored", "STORE", "hooked", "Point",
     "Money", "describe", "data_of",
 ]
@@ -187,6 +187,14 @@ async def later():
 
 def streamed(event):
     return {"later": later()}
+
+
+async def later_point():
+    return Point(7)
+
+
+def streamed_point(event):
+    return {"later": later_point()}
 
 
 def act(event):

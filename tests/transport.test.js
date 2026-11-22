@@ -18,6 +18,7 @@ import {
     walked,
     pointed,
     streamed,
+    streamed_point,
     actions,
     one,
     two,
@@ -656,6 +657,29 @@ test('a coroutine at the top of a load() is awaited in the browser as on the ser
 
     expect(String(describe(await $B.$getitem(routeData({ ...browser }), 'later')))).toBe('float:1.0');
     expect(await browser.later).toBe(1);
+});
+
+// And one that comes while no engine is there: JavaScript's copy, which
+// Python reads, once the engine loads, as the instance it stands for, as a
+// value handed at once. Copied apart, it stayed a JavaScript object to Python.
+test('a coroutine’s result that comes with no engine is JavaScript’s copy, which Python reads rebuilt', async () => {
+    const made = encode(await routeLoad(streamed_point, 'streamed point — transport')({}));
+    const [, key, [tag, promise]] = made[2];
+    const arrived = structuredClone(await promise);
+    const codec = globalThis[CODEC];
+    let copy;
+
+    delete globalThis[CODEC];
+
+    try {
+        copy = await decode(['p', made[1], ['d', key, [tag, Promise.resolve(arrived)]], made[3]]).later;
+    } finally {
+        globalThis[CODEC] = codec;
+        codecLoaded();
+    }
+
+    expect(copy).toEqual({ x: 7 });
+    expect(String(describe(pyBind(copy)))).toBe('Point:Point(7)');
 });
 
 test('a value no engine can rebuild yet is JavaScript’s copy, which Python reads rebuilt', () => {
