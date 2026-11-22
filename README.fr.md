@@ -899,9 +899,11 @@ Où on en est, chaque ligne tenue par un test :
 
 Une valeur seule dans un attribut de texte s'écrit comme Python l'écrit, comme
 avec du texte autour : `title={items}` vaut `['a', 'b']`, `title={1.0}` vaut
-`1.0`, un dict son `repr`, et le texte change quand la liste a changé. Il devient
-texte quand Svelte l'écrit : une valeur qu'un attribut écrit après elle remplace
-ne le devient jamais. None, un booléen, `class` et `style` gardent leur sens pour
+`1.0`, un dict son `repr`, et le texte change quand la liste a changé. Elle part
+en texte, que l'élément prend comme attribut, un `translate` de `no` compris ;
+un `__str__` qui lève lève là où Svelte écrit l'attribut, comme l'erreur de
+Python, et non là où un attribut écrit après lui le remplace. None, un booléen,
+`class` et `style` gardent leur sens pour
 l'attribut, et une propriété que Svelte règle à la valeur, une `value`, un
 `volume`, un `defaultValue`, la prend telle quelle, comme celle d'un élément
 personnalisé. Un composant
@@ -1933,7 +1935,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 214 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 217 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

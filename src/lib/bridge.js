@@ -285,17 +285,17 @@ const attribute = (value) => {
         : viewOf(value);
 };
 
-// The text of a Python value in an attribute, made when Svelte writes it, as
-// Svelte makes a JavaScript value text: the value an attribute written after
-// it overrides, in a spread or by name, is never made text, and its `__str__`
-// never runs.
-class PythonText {
-    constructor(value) {
-        this.value = value;
+// What a Python value whose `__str__` raised stands for in an attribute: the
+// error, raised as the bridge raises one (`pyError`), when Svelte writes the
+// attribute, and never when an attribute written after it overrides it, in a
+// spread or by name.
+class UnwrittenText {
+    constructor(error) {
+        this.error = error;
     }
 
     toString() {
-        return __brycomp_pybridge.str(this.value);
+        throw pyError(this.error);
     }
 }
 
@@ -826,12 +826,19 @@ export const __brycomp_pybridge = {
     // float `1.0`; what has a meaning of its own to an attribute crosses as a
     // prop does (`bound`), None the absence, a boolean its presence, a
     // callable its handler, an int and a str their own text, and a value of
-    // JavaScript's as JavaScript writes it. Made text when Svelte writes it
-    // (`PythonText`), as Svelte makes a JavaScript value text.
+    // JavaScript's as JavaScript writes it. Handed to Svelte as text, which it
+    // writes as an attribute whatever property the element has of that name: a
+    // `translate` of "no" stays off. A text that raises raises where Svelte
+    // writes it (`UnwrittenText`), as Python's error.
     attr(value) {
-        return value !== null && typeof value === 'object' && value !== NONE && quietPyType(value) !== undefined && !callable(value)
-            ? new PythonText(value)
-            : attribute(value);
+        if (value === null || typeof value !== 'object' || value === NONE || quietPyType(value) === undefined || callable(value)) return attribute(value);
+
+        try {
+            return pyStr(value);
+        } catch (error) {
+            if (raised(error)) return new UnwrittenText(error);
+            return String(value);
+        }
     },
 
     // `{@html}`: Python's text, but for a `TrustedHTML` an application's

@@ -69,8 +69,10 @@ export const attributeWrapper = (name) =>
 
 // An attribute of text, which a value alone between braces is written into as
 // Python writes it (`__brycomp_attr`): neither `class` nor a truth, nor `style`,
-// which Svelte reads itself, nor a property Svelte sets to the value as it is.
-export const textAttribute = (name) => attributeWrapper(name) === null && name !== 'style' && !VALUE_PROPERTIES.includes(name);
+// which Svelte reads itself, nor a property Svelte sets to the value as it is,
+// however its name is spelled, as HTML reads a name: `defaultvalue` too.
+export const textAttribute = (name) =>
+    attributeWrapper(name) === null && !/^style$/i.test(name) && !VALUE_PROPERTIES.some((one) => one.toLowerCase() === String(name).toLowerCase());
 
 // The bindings Svelte reads for truth, `input.checked = Boolean(value)` and
 // `!!get()` for `paused`: the boolean attributes it binds, `checked`,

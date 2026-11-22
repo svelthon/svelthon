@@ -6,7 +6,15 @@ class Point:
 
 class Caption:
     def __str__(self):
-        raise ValueError("a caption overridden is never made text")
+        raise ValueError("a caption overridden is never written")
+
+
+class Word:
+    def __init__(self, text):
+        self.text = text
+
+    def __str__(self):
+        return self.text
 
 
 items = [1, 2]
@@ -25,6 +33,9 @@ tag = "video"
 fallback = {"title": Caption()}
 chosen = {"title": "Published"}
 caption = Caption()
+no = Word("no")
+off = Word("false")
+enumerated = {"translate": no, "draggable": off}
 </script>
 
 <p id="list" title={items}></p>
@@ -49,3 +60,10 @@ caption = Caption()
 </select>
 <p id="overridden" {**fallback} title="Published"></p>
 <p id="overriding" title={caption} {**chosen}></p>
+<p id="enumerated" translate={no} draggable={off}></p>
+<p id="enumerated-spread" {**enumerated}></p>
+<select id="default-case" multiple defaultvalue={[2, 3]}>
+    <option value={1}>One</option>
+    <option value={2}>Two</option>
+    <option value={3}>Three</option>
+</select>

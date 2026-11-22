@@ -870,9 +870,11 @@ Where it stands, each line held by a test:
 
 A value alone in an attribute of text is written as Python writes it, as it is
 with text around it: `title={items}` is `['a', 'b']`, `title={1.0}` is `1.0`, a
-dict its `repr`, and the text is another once the list has changed. It is made
-text when Svelte writes it, so a value an attribute written after it overrides
-is never made text. None, a boolean, `class` and `style` keep their meaning to
+dict its `repr`, and the text is another once the list has changed. It goes out
+as text, which an element takes as its attribute, `translate` of `no` included;
+a `__str__` that raises raises where Svelte writes the attribute, as Python's
+error, and not where an attribute written after it overrides it. None, a
+boolean, `class` and `style` keep their meaning to
 the attribute, and a property Svelte sets to the value, a `value`, a `volume`, a
 `defaultValue`, takes it as it is, as a custom element's does. An idiomatic Svelte
 component writes the array's own `a,b` and keeps it after a change in place,
@@ -1889,7 +1891,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 214 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 217 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
