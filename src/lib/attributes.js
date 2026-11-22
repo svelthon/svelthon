@@ -47,6 +47,11 @@ export const BOOLEAN_ATTRIBUTES = [
 // `srcObject` are values. `tests/attributes.test.js` holds that true.
 export const BOOLEAN_PROPERTIES = ['defaultChecked'];
 
+// The values among them, which an element takes as they are: a `volume` its
+// number, the `defaultValue` a `<select>` compares its options with, a list for
+// one that chooses several, a stream.
+export const VALUE_PROPERTIES = ['value', 'volume', 'defaultValue', 'srcObject'];
+
 const BOOLEAN_ATTRIBUTE = new RegExp(`^(?:${[...BOOLEAN_ATTRIBUTES, ...BOOLEAN_PROPERTIES].join('|')})$`, 'i');
 
 // The wrapper an element's attribute of that name goes through, or null for
@@ -61,6 +66,11 @@ export const attributeWrapper = (name) =>
           : BOOLEAN_ATTRIBUTE.test(name)
             ? '__brycomp_truthy'
             : null;
+
+// An attribute of text, which a value alone between braces is written into as
+// Python writes it (`__brycomp_attr`): neither `class` nor a truth, nor `style`,
+// which Svelte reads itself, nor a property Svelte sets to the value as it is.
+export const textAttribute = (name) => attributeWrapper(name) === null && name !== 'style' && !VALUE_PROPERTIES.includes(name);
 
 // The bindings Svelte reads for truth, `input.checked = Boolean(value)` and
 // `!!get()` for `paused`: the boolean attributes it binds, `checked`,

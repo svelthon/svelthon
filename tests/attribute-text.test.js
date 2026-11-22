@@ -19,7 +19,9 @@ test.for([
     ['int', 'title', '3'],
     ['bool', 'aria-pressed', 'true'],
     ['none', 'title', null],
-    ['class', 'class', 'a b']
+    ['class', 'class', 'a b'],
+    ['overridden', 'title', 'Published'],
+    ['overriding', 'title', 'Published']
 ])('#%s has %s %s', ([id, name, expected]) => {
     const target = document.body.appendChild(document.createElement('div'));
 
@@ -29,11 +31,21 @@ test.for([
     expect(target.querySelector(`#${id}`).getAttribute(name)).toBe(expected);
 });
 
-test('a value keeps the number a binding compares', () => {
+// A property Svelte sets to the value, by name, in a spread or on a
+// `<svelte:element>`, takes the value as it is: a `volume` its number, a
+// `defaultValue` the one its options are compared with.
+test('a property Svelte sets keeps the value as it is', () => {
     const target = document.body.appendChild(document.createElement('div'));
+    const element = (id) => target.querySelector(`#${id}`);
 
     mount(AttributeText, { target });
     flushSync();
 
-    expect(target.querySelector('#value').value).toBe('1');
+    expect([
+        element('value').value,
+        element('volume').volume,
+        element('volume-spread').volume,
+        element('volume-element').volume,
+        element('default').selectedIndex
+    ]).toEqual(['1', 0.25, 0.25, 0.25, 1]);
 });

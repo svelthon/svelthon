@@ -3,7 +3,7 @@
 // browser playground compiles components client-side and needs exactly this,
 // while the file next door needs `fs` and `path` and cannot be loaded there.
 import { parse } from 'svelte/compiler';
-import { attributeWrapper, truthBinding, BOOLEAN_ATTRIBUTES, BOOLEAN_PROPERTIES } from './attributes.js';
+import { attributeWrapper, textAttribute, truthBinding, BOOLEAN_ATTRIBUTES, BOOLEAN_PROPERTIES } from './attributes.js';
 import {
     atomic,
     replaceLiterals,
@@ -4373,13 +4373,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const grouped = !isComponent(tag) && tag !== null && tagNames(markup, tag.start).has('bind:group');
         const kind = toPythonChild() ? 'child' : name !== 'value' ? '' : grouped ? 'choice' : 'scalar';
 
-        // An attribute of text on an element, its value alone between the
-        // braces: written as Python writes it, as it is with text around it
-        // (`rendered`), one value having one rendering; `style` stays Svelte's,
-        // and a custom element's property takes the value as it is, as does
-        // one of a `<svelte:element>` whose name makes a custom element as it
-        // renders (`__brycomp_pybridge.element`).
-        if (kind === '' && onElement(tag) && !custom(tag) && name !== 'style') {
+        // An attribute of text on an element (`textAttribute`), its value
+        // alone between the braces: written as Python writes it, as it is with
+        // text around it (`rendered`), one value having one rendering; a
+        // property Svelte sets to the value, a `volume`, a `defaultValue`,
+        // takes it as it is, as does a custom element's property, and one of a
+        // `<svelte:element>` whose name makes a custom element as it renders
+        // (`__brycomp_pybridge.element`).
+        if (kind === '' && onElement(tag) && !custom(tag) && textAttribute(name)) {
             if (tag.element !== undefined) {
                 return `{${readThrough(inner, call(inner, '__brycomp_boxed', undefined, 'python'), (boxed) => `__brycomp_pybridge.element(${tag.element}, "__brycomp_attr", ${boxed}[0], ${JSON.stringify(name)})`)}}`;
             }

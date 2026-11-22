@@ -888,9 +888,12 @@ Où on en est, chaque ligne tenue par un test :
 
 Une valeur seule dans un attribut de texte s'écrit comme Python l'écrit, comme
 avec du texte autour : `title={items}` vaut `['a', 'b']`, `title={1.0}` vaut
-`1.0`, un dict son `repr`, et le texte change quand la liste a changé. None, un
-booléen, `class`, `style` et une `value` gardent leur sens pour l'attribut, et la
-propriété d'un élément personnalisé prend la valeur telle quelle. Un composant
+`1.0`, un dict son `repr`, et le texte change quand la liste a changé. Il devient
+texte quand Svelte l'écrit : une valeur qu'un attribut écrit après elle remplace
+ne le devient jamais. None, un booléen, `class` et `style` gardent leur sens pour
+l'attribut, et une propriété que Svelte règle à la valeur, une `value`, un
+`volume`, un `defaultValue`, la prend telle quelle, comme celle d'un élément
+personnalisé. Un composant
 Svelte idiomatique écrit le `a,b` du tableau et le garde après un changement sur
 place, puisque Svelte compare la valeur à celle qu'il a appliquée la fois
 d'avant, par identité : le seul écart que `tests/parity.test.js` documente, en
@@ -1919,7 +1922,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 220 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 222 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

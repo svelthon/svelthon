@@ -6,7 +6,7 @@ import { host as brylters } from 'brylters';
 import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
 import BROWSER from 'esm-env/browser';
-import { attributeWrapper } from './attributes.js';
+import { attributeWrapper, textAttribute } from './attributes.js';
 import { markTop, origins, codecLoaded, rebuilt, transporters, liveLoad } from './transport.js';
 
 // Held here as constants of this module: a binding imported is read through the
@@ -279,6 +279,20 @@ const attribute = (value) => {
         ? pyHandler(value)
         : viewOf(value);
 };
+
+// The text of a Python value in an attribute, made when Svelte writes it, as
+// Svelte makes a JavaScript value text: the value an attribute written after
+// it overrides, in a spread or by name, is never made text, and its `__str__`
+// never runs.
+class PythonText {
+    constructor(value) {
+        this.value = value;
+    }
+
+    toString() {
+        return __brycomp_pybridge.str(this.value);
+    }
+}
 
 // A key Svelte takes for an attachment (`createAttachmentKey`), told as Svelte
 // tells one: a symbol described `@attach`.
@@ -807,10 +821,11 @@ export const __brycomp_pybridge = {
     // float `1.0`; what has a meaning of its own to an attribute crosses as a
     // prop does (`bound`), None the absence, a boolean its presence, a
     // callable its handler, an int and a str their own text, and a value of
-    // JavaScript's as JavaScript writes it.
+    // JavaScript's as JavaScript writes it. Made text when Svelte writes it
+    // (`PythonText`), as Svelte makes a JavaScript value text.
     attr(value) {
         return value !== null && typeof value === 'object' && value !== NONE && quietPyType(value) !== undefined && !callable(value)
-            ? __brycomp_pybridge.str(value)
+            ? new PythonText(value)
             : attribute(value);
     },
 
@@ -1583,7 +1598,7 @@ export const __brycomp_pybridge = {
             else if (wrapper === '__brycomp_truthy' && !custom && present) out[key] = __brycomp_pybridge.truthy(read[key]);
             else if (wrapper === '__brycomp_hidden' && !custom && present) out[key] = __brycomp_pybridge.hidden(read[key]);
             else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__brycomp_pybridge.bound(read[key]));
-            else if (!custom && wrapper === null && key !== 'style') out[key] = __brycomp_pybridge.attr(read[key]);
+            else if (!custom && textAttribute(key)) out[key] = __brycomp_pybridge.attr(read[key]);
         }
 
         return out;

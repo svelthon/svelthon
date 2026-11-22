@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { render } from 'svelte/server';
 
-import { BOOLEAN_ATTRIBUTES, attributeWrapper } from '../src/lib/attributes.js';
+import { BOOLEAN_ATTRIBUTES, VALUE_PROPERTIES, attributeWrapper } from '../src/lib/attributes.js';
 import BooleanNames from './fixtures/BooleanNames.svelte';
 import BooleanNamesNative from './fixtures/BooleanNamesNative.svelte';
 
@@ -34,9 +34,8 @@ test('the boolean attributes are Svelte’s', () => {
 // name of its `DOM_PROPERTIES` but the four that are values.
 test('the boolean properties Svelte sets are read for truth', () => {
     const properties = names(utils.match(/const DOM_PROPERTIES = \[([^\]]*)\]/)[1]);
-    const values = ['value', 'volume', 'defaultValue', 'srcObject'];
 
-    expect(properties.filter((name) => !values.includes(name) && attributeWrapper(name) !== '__brycomp_truthy')).toEqual([]);
+    expect(properties.filter((name) => !VALUE_PROPERTIES.includes(name) && attributeWrapper(name) !== '__brycomp_truthy')).toEqual([]);
 });
 
 test.for([[false], [true]])('the server writes them as Svelte does, on: %s', ([on]) => {
