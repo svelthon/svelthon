@@ -299,6 +299,11 @@ class UnwrittenText {
     }
 }
 
+// The spreads that hold one (`spreadElement`), and what an element's
+// attributes gave (`held`).
+const HOLDING = new WeakSet();
+const GIVEN = [];
+
 // A key Svelte takes for an attachment (`createAttachmentKey`), told as Svelte
 // tells one: a symbol described `@attach`.
 const attaching = (key) => typeof key === 'symbol' && key.description === '@attach';
@@ -837,6 +842,49 @@ export const __brycomp_pybridge = {
 
         if (text instanceof UnwrittenText) throw pyError(text.error);
         return text;
+    },
+
+    // An element where a text attribute or a spread comes before a spread
+    // (`slotted` in markup.js): what each gives, kept at its place in the
+    // order written as Svelte evaluates the element's attributes, all at once
+    // (`held`, its first emptying what an element before left), an
+    // attribute's under its name and a spread's (`names[at]` null) as it is,
+    // and settled by its last spread, `out`, as Svelte merges them
+    // (`settled`): a text that raised and that nothing written after it
+    // overrode raises, `later` the names written after the last spread.
+    // Merged only when one of them holds such a text.
+    held(at, value) {
+        if (at === 0) GIVEN.length = 0;
+        GIVEN[at] = value;
+
+        return value;
+    },
+
+    settled(later, names, out) {
+        let holding = false;
+
+        for (let at = 0; at < names.length && !holding; at++) {
+            holding = names[at] === null ? HOLDING.has(GIVEN[at]) : GIVEN[at] instanceof UnwrittenText;
+        }
+
+        if (holding) {
+            const final = new Map();
+
+            names.forEach((name, at) => {
+                const value = GIVEN[at];
+
+                if (name !== null) final.set(name, value);
+                else for (const key of Object.keys(value ?? {})) final.set(key.toLowerCase(), value[key]);
+            });
+
+            for (const key of Object.keys(out ?? {})) final.delete(key.toLowerCase());
+
+            for (const [key, value] of final) {
+                if (value instanceof UnwrittenText && !later.includes(key)) throw pyError(value.error);
+            }
+        }
+
+        return out;
     },
 
     // And where an attribute written after it may override it, a text that
@@ -1627,6 +1675,7 @@ export const __brycomp_pybridge = {
             else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__brycomp_pybridge.bound(read[key]));
             else if (!custom && textAttribute(key)) {
                 out[key] = (later === true || later.includes(key.toLowerCase()) ? __brycomp_pybridge.heldAttr : __brycomp_pybridge.attr)(read[key]);
+                if (out[key] instanceof UnwrittenText) HOLDING.add(out);
             }
         }
 

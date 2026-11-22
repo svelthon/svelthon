@@ -46,8 +46,15 @@ test.for([
     ['spread-then-attribute', true],
     ['element', true],
     ['element-spread', true],
+    ['attribute-then-empty-spread', true],
+    ['attribute-then-other-spread', true],
+    ['between-spreads', true],
+    ['element-attribute-then-spread', true],
+    ['call-then-spread', true],
     ['spread-overridden', false],
-    ['attribute-overridden', false]
+    ['attribute-overridden', false],
+    ['spread-overridden-by-spread', false],
+    ['attribute-overridden-two-spreads-on', false]
 ])('a text that raises on %s raises on a server: %s', ([way, raises]) => {
     const rendered = () => render(AttributeTextRaisesOn, { props: { way } }).body;
 

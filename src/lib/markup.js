@@ -4238,6 +4238,41 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const readThrough = (inner, read, through, again = !callsAnything(inner)) =>
         again ? `({ get value() { return ${through(unmemoized(inner, read))}; } }).value` : through(read);
 
+    // An element where a text attribute or a spread comes before a spread:
+    // what each gives is kept at its place in the order written
+    // (`__brycomp_pybridge.held`), an attribute's under its name and a
+    // spread's as it is (`null`), which the element's last spread settles as
+    // Svelte merges them (`__brycomp_pybridge.settled`). Read through a getter
+    // each, which Svelte holds in no derived, so that each is kept as Svelte
+    // evaluates the element's attributes.
+    const slotted = (tag) => {
+        tag.slot ??= { names: [] };
+
+        return tag.slot;
+    };
+    const keeping = (kept, name) => (read) => {
+        kept.names.push(name);
+
+        return `__brycomp_pybridge.held(${kept.names.length - 1}, ${read})`;
+    };
+    const settling = (kept, later) => (read) => `__brycomp_pybridge.settled(${later}, ${JSON.stringify(kept.names)}, ${read})`;
+
+    // A read so kept (`keeping`), through a getter even where the author wrote
+    // a call, whose derived it reads, as Svelte holds a call's in one: held
+    // there, the element's first one kept nothing when only another changed.
+    const keptRead = (inner, read, through) => {
+        if (!callsAnything(inner)) return readThrough(inner, read, through, true);
+
+        // The walk that only collects names reads a stand-in.
+        const called = /^(__brycomp_expr_\w+)\(/.exec(read);
+
+        if (called === null) return `({ get value() { return ${through(read)}; } }).value`;
+
+        chain.memoRow(`{const ${called[1]}_held = $derived(${read})}`, mentioned(inner.trim()));
+
+        return `({ get value() { return ${through(`${called[1]}_held`)}; } }).value`;
+    };
+
     // How the interpolations of a component's value between quotes, from its
     // opening quote `at`, are handed (`quotedHanded`).
     const handedBetween = (at, closing) => {
@@ -4382,16 +4417,23 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // (`__brycomp_pybridge.element`).
         //
         // A text that raises raises as it is read, but where a spread written
-        // after it may override it (`__brycomp_heldAttr`).
+        // after it may override it (`__brycomp_heldAttr`), where the element's
+        // last spread raises it if none does (`slotted`).
         if (kind === '' && onElement(tag) && !custom(tag) && textAttribute(name)) {
             const words = tagWords(markup, tag.start);
-            const wrapper = words.lastIndexOf(SPREAD_WORD) > words.indexOf(name.toLowerCase()) ? '__brycomp_heldAttr' : '__brycomp_attr';
+            const held = words.lastIndexOf(SPREAD_WORD) > words.indexOf(name.toLowerCase());
+            const wrapper = held ? '__brycomp_heldAttr' : '__brycomp_attr';
+            const kept = held ? slotted(tag) : null;
+            const keep = kept === null ? (read) => read : keeping(kept, name.toLowerCase());
 
             if (tag.element !== undefined) {
-                return `{${readThrough(inner, call(inner, '__brycomp_boxed', undefined, 'python'), (boxed) => `__brycomp_pybridge.element(${tag.element}, "${wrapper}", ${boxed}[0], ${JSON.stringify(name)})`)}}`;
+                const through = (boxed) => keep(`__brycomp_pybridge.element(${tag.element}, "${wrapper}", ${boxed}[0], ${JSON.stringify(name)})`);
+                const read = call(inner, '__brycomp_boxed', undefined, 'python');
+
+                return `{${kept === null ? readThrough(inner, read, through) : keptRead(inner, read, through)}}`;
             }
 
-            return `{${unmemoized(inner, call(inner, wrapper))}}`;
+            return `{${kept === null ? unmemoized(inner, call(inner, wrapper)) : keptRead(inner, call(inner, wrapper), keep)}}`;
         }
 
         const read = call(inner, '__brycomp_bound', undefined, kind);
@@ -4693,16 +4735,31 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                             );
                         }
 
+                        // On an element where a text attribute or a spread comes
+                        // before a spread, what it gives is kept (`slotted`), and
+                        // the last spread settles what each gave: a text that
+                        // raised and nothing written after it overrode raises.
+                        // Held to the write, a spread written after it with no
+                        // such key left it in a property Svelte sets to a
+                        // boolean, `translate`, which took it for true. An
+                        // element with one spread alone, and what is written
+                        // after the last, are read as they were.
+                        const plain = onElement(tag) && heldChild() === null && !toPythonChild() && spreadWrapper !== '__brycomp_spreadCustom';
+                        const kept = plain && (later === null || tag.slot !== undefined) ? slotted(tag) : null;
+                        const keep = kept === null ? (read) => read : later === null ? keeping(kept, null) : settling(kept, later);
+
                         out +=
                             heldChild() !== null
                                 ? `{...${readThrough(spreadExpression, call(spreadExpression, '__brycomp_spreadEntries', undefined, 'python'), (entries) => forChild(entries, 'spread'))}}`
                                 : toPythonChild()
                                   ? `{...${unmemoized(spreadExpression, call(spreadExpression, '__brycomp_spreadPython', undefined, 'python'), false, 'spread')}}`
                                   : tag?.element !== undefined
-                                    ? `{...${readThrough(spreadExpression, call(spreadExpression, '__brycomp_spreadEntries', undefined, 'python'), (entries) => `__brycomp_pybridge.elementSpread(${tag.element}, ${entries}, __brycomp_event, ${grouped}, ${later ?? 'true'})`)}}`
-                                    : onElement(tag) || isComponent(tag)
-                                      ? `{...${unmemoized(spreadExpression, call(spreadExpression, spreadWrapper), false, isComponent(tag) && 'spread')}}`
-                                      : `{...${call(spreadExpression, spreadWrapper)}}`;
+                                    ? `{...${(kept === null ? readThrough : keptRead)(spreadExpression, call(spreadExpression, '__brycomp_spreadEntries', undefined, 'python'), (entries) => keep(`__brycomp_pybridge.elementSpread(${tag.element}, ${entries}, __brycomp_event, ${grouped}, ${later ?? 'true'})`))}}`
+                                    : kept !== null
+                                      ? `{...${keptRead(spreadExpression, call(spreadExpression, spreadWrapper), keep)}}`
+                                      : onElement(tag) || isComponent(tag)
+                                        ? `{...${unmemoized(spreadExpression, call(spreadExpression, spreadWrapper), false, isComponent(tag) && 'spread')}}`
+                                        : `{...${call(spreadExpression, spreadWrapper)}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw refuse(
                             new SyntaxError(

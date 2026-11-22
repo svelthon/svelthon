@@ -11,6 +11,13 @@ caption = Caption()
 tag = "p"
 raising = {"translate": caption, "draggable": caption}
 chosen = {"translate": "no"}
+both = {"translate": "no", "draggable": "false"}
+empty = {}
+titled = {"title": "kept"}
+
+
+def made():
+    return caption
 </script>
 
 {#if way == "translate"}
@@ -31,4 +38,18 @@ chosen = {"translate": "no"}
     <svelte:element this={tag} translate={caption}></svelte:element>
 {:else if way == "element-spread"}
     <svelte:element this={tag} {**raising}></svelte:element>
+{:else if way == "attribute-then-empty-spread"}
+    <p translate={caption} {**empty}></p>
+{:else if way == "attribute-then-other-spread"}
+    <p translate={caption} {**titled}></p>
+{:else if way == "between-spreads"}
+    <p {**raising} {**titled}></p>
+{:else if way == "element-attribute-then-spread"}
+    <svelte:element this={tag} translate={caption} {**empty}></svelte:element>
+{:else if way == "spread-overridden-by-spread"}
+    <p {**raising} {**both}></p>
+{:else if way == "attribute-overridden-two-spreads-on"}
+    <p translate={caption} {**chosen} {**empty}></p>
+{:else if way == "call-then-spread"}
+    <p translate={made()} {**empty}></p>
 {/if}

@@ -84,8 +84,9 @@ test('a value whose text raises raises its error where the attribute is written'
 
 // On a property Svelte sets to a boolean too, `translate`, `draggable` or
 // `spellcheck`, which took the held error for true and raised nothing, by
-// name, in a spread, and on a `<svelte:element>`; but for one an attribute
-// written after it overrides.
+// name, in a spread, and on a `<svelte:element>`, a spread written after it
+// with no such key among them; but for one an attribute or a spread written
+// after it overrides.
 test.for([
     ['translate', true],
     ['draggable', true],
@@ -94,8 +95,15 @@ test.for([
     ['spread-then-attribute', true],
     ['element', true],
     ['element-spread', true],
+    ['attribute-then-empty-spread', true],
+    ['attribute-then-other-spread', true],
+    ['between-spreads', true],
+    ['element-attribute-then-spread', true],
+    ['call-then-spread', true],
     ['spread-overridden', false],
-    ['attribute-overridden', false]
+    ['attribute-overridden', false],
+    ['spread-overridden-by-spread', false],
+    ['attribute-overridden-two-spreads-on', false]
 ])('a text that raises on %s raises: %s', ([way, raises]) => {
     const target = document.body.appendChild(document.createElement('div'));
     const mounted = () => {
