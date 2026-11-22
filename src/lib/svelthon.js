@@ -2054,14 +2054,18 @@ function starredFile(mod, level, fromDirectory, path) {
     const base = resolve(fromDirectory, ...Array(level - 1).fill('..'));
     const named = resolve(base, ...mod.split('.').filter(Boolean));
 
-    return [`${named}.py`, resolve(named, '__init__.py')].find((one) => existsSync(one));
+    return [`${named}.py`, resolve(named, '__init__.py')].find(isFile);
 }
+
+// A file, or a link to one: a directory named like a module is passed by, as
+// CPython passes it by.
+const isFile = (candidate) => statSync(candidate, { throwIfNoEntry: false })?.isFile() === true;
 
 // The file a module name stands for, or nothing.
 function moduleFile(mod, fromDirectory, path) {
     return searchedFrom(fromDirectory, path)
         .flatMap((directory) => [resolve(directory, `${mod}.svelte.py`), resolve(directory, `${mod}.py`)])
-        .find((candidate) => existsSync(candidate));
+        .find(isFile);
 }
 
 // Where a module name is looked for: the importer's own directory, then the

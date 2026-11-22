@@ -5,7 +5,7 @@
 // is refused on its line when the component compiles, rather than failing at
 // mount with a `JavascriptError` that `except ImportError` does not catch.
 import { test, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, unlinkSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, unlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { preprocess } from 'svelte/compiler';
@@ -293,6 +293,31 @@ test('a module whose import disappears is checked again', () => {
         expect(load).not.toThrow();
         unlinkSync(imported);
         expect(load).toThrow(/`imported` is not a module.*importer\.py:1\)/);
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});
+
+// A directory named like a module is passed by, as CPython passes it by: the
+// search goes on to the file, beside the importer or along the path.
+test.for([
+    ['settings.svelte.py', 'settings.py'],
+    ['settings.py', 'lib/settings.py']
+])('a directory %s is passed by for the module file %s', ([folder, file]) => {
+    const directory = mkdtempSync(join(tmpdir(), 'svelthon-imports-'));
+    const importer = join(directory, 'relay.py');
+
+    mkdirSync(join(directory, folder));
+    mkdirSync(join(directory, 'lib'));
+    writeFileSync(join(directory, file), 'label = "file"\n');
+    writeFileSync(importer, 'from settings import label\n');
+
+    try {
+        const plugin = svelthon({ path: [join(directory, 'lib')] });
+        const load = (id) => plugin.load.call({ addWatchFile() {} }, id);
+        const [, compiled] = load(`${importer}?python`).match(/from "(virtual:svelthon\/[^"]+)"/);
+
+        expect(load(`\0${compiled}`).code).toContain(`import ${JSON.stringify(`${join(directory, file)}?python`)};`);
     } finally {
         rmSync(directory, { recursive: true, force: true });
     }
