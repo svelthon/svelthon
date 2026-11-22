@@ -41,13 +41,13 @@ export default defineConfig({
         // discover bare imports, so we name them and skip the scan entirely.
         //
         // Every one the pages import, the engine's two halves among them, which
-        // Bryntime and Bryc reach through their own folders. Named `svelte`
+        // Bryntime and Brycomp reach through their own folders. Named `svelte`
         // alone, the four others were found as the first pages were served,
         // and the server bundled them again and reloaded every page loading:
         // `markup.html`, which imports the compiler, came back empty on a
         // machine slow enough for its three tries to fall in that window.
         entries: [],
-        include: ['svelte', 'svelte/compiler', 'esm-env/browser', 'bryntime > bryvend', 'bryc > bryvend', 'bryc > bryvend/compiler']
+        include: ['svelte', 'svelte/compiler', 'esm-env/browser', 'bryntime > bryvend', 'brycomp > bryvend', 'brycomp > bryvend/compiler']
     },
 
     // The dev server watches the tree for the edits it reloads, and probes

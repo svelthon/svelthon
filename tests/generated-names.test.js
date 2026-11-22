@@ -125,7 +125,7 @@ const published = (compiler) => {
 // exactly the rename this is meant to catch.
 //
 // Plus what the compiler writes into the template's functions itself: every dot
-// of the markup becomes a call there, written by Bryc's `templateDots` under
+// of the markup becomes a call there, written by Brycomp's `templateDots` under
 // the names the compiler's runtime gives `readAttr` and `writeAttr`, so the
 // markup pass never spells them. Read off those two entries of `compile.js`,
 // so a name it stops giving leaves this list as well.

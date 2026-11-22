@@ -19,7 +19,7 @@ import {
     computing as computingIn,
     costly as costlyIn,
     JS_RESERVED
-} from 'bryc';
+} from 'brycomp';
 
 // The scanners below look for a closing character and have to know which
 // characters are not code, and `atomic` says: the brace, the bracket, the

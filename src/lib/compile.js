@@ -52,7 +52,7 @@ import {
     jsImportLine,
     moduleImports,
     templateDots
-} from 'bryc';
+} from 'brycomp';
 
 const $B = globalThis.__BRYTHON__;
 
@@ -517,7 +517,7 @@ const UNASSIGNABLE = new Set(['True', 'False', 'None', '__debug__']);
 // kept the builtin. Bound, an absent name is the builtin again, as in Python.
 // Every builtin it reads where it may write at a key no text names, and none
 // no statement may bind: `True = None` refused the module. Nor one the module
-// imports from JavaScript, which is no builtin there, and which Bryc refuses
+// imports from JavaScript, which is no builtin there, and which Brycomp refuses
 // to see bound: `importjs { round }` beside `len(globals())` compiled no more.
 // Nor one its script binds, which needs no binding. Nor one JavaScript
 // reserves, `eval`, a parameter's name or a key read: bound, it refused the
@@ -1151,7 +1151,7 @@ const ADAPTERS = {
     __slice: '__slice'
 };
 
-// What Bryc is told of the framework it compiles for, by the interface its
+// What Brycomp is told of the framework it compiles for, by the interface its
 // door writes out: the name its refusals are said under, the tool the author
 // ran; the module the generated code imports its runtime from; the names it
 // reaches that runtime by; the words it reserves, the locked ones of its
@@ -1164,7 +1164,7 @@ const ADAPTERS = {
 // made Python (`takeArrows`); and Svelte's
 // runes, whose names no binding of the component may take: Svelte reads
 // `$state` as a store once `state` is bound, so a JavaScript import of one is
-// held under another variable (Bryc's), and a `def`'s wrapper too
+// held under another variable (Brycomp's), and a `def`'s wrapper too
 // (`wrapperName`); the adapters of the template, which its functions then
 // read off the namespace, where a search at each call found them; and where
 // Bryntime does `d[k]`, `d.get(k)`, `x in c`, `==` and `!=` inline, which the
@@ -1277,8 +1277,8 @@ const injectable = (one, { declared, foreign = [], names, starred, element }, co
     (!one.whenRead || names.has(one.name)) &&
     (!one.element || element || !starred);
 
-// A locked name is Svelthon's own word (`HOST.reserved`), refused by Bryc.
-// The compiler's own prefix (Bryc's `COMPILER_PREFIX`) keeps six families of
+// A locked name is Svelthon's own word (`HOST.reserved`), refused by Brycomp.
+// The compiler's own prefix (Brycomp's `COMPILER_PREFIX`) keeps six families of
 // name this file builds out of the author's, `__fn_go`, `__rev_c`, `__bump_c`,
 // `__local_n`, `__js_mount`, `__root_loop`, declared in the same scope as the
 // author's names, beside `__proto`.
@@ -1337,7 +1337,7 @@ function refuseLocked(declared, component, source, lines, lineOffset = 0) {
     }
 
     // `surface()` records where each name was bound, so the refusal names the
-    // line the word was taken on (Bryc's `refuseHostWords`). A name that came
+    // line the word was taken on (Brycomp's `refuseHostWords`). A name that came
     // from `reserved` rather than from a binding has none.
     refuseHostWords(HOST, declared, component, source, lines, lineOffset);
 }
@@ -1694,7 +1694,7 @@ const markerBindings = (c) =>
 // author's, never a marker of Svelthon's nor a name a helper of it may take.
 const foreignNames = (names) => new Set(names.map(pythonName));
 
-// The text the JavaScript is compiled from (Bryc's `host.translate`): the
+// The text the JavaScript is compiled from (Brycomp's `host.translate`): the
 // author's, each marker word of a declaration spelled for its statement.
 //
 // The word as the author spelled it, which Python reads by its NFKC form:
@@ -2264,7 +2264,7 @@ const SUBSCRIBING = (c) =>
     c.state.length > 0 || c.funcs.length > 0 || c.bindables.length > 0 || c.starred;
 
 // The revision of a name: Svelte's state beside the cell, which a change in
-// place of what the cell holds moves (Bryc's `bump`).
+// place of what the cell holds moves (Brycomp's `bump`).
 const rev = (name) => `__rev_${name}`;
 
 // The component script, one function per section.
@@ -2572,7 +2572,7 @@ function authorBindings(c) {
         // its own float, never `===` to the child's number. Read first, the
         // write took the parent's next value in and hid it under the child's.
         // And a write Svelte refuses, made while the page renders, leaves the
-        // prop following what it held, as Bryc's accessor leaves a state.
+        // prop following what it held, as Brycomp's accessor leaves a state.
         //
         // A route's `data` is SvelteKit's merge of its nodes' plain objects,
         // read back as the dict of what the `load()`s returned (`routeData`),
@@ -2621,7 +2621,7 @@ function authorBindings(c) {
                 ` function (${NEXT_VALUE}) { ${set} }, () => ${plainProp && !readOnly ? `(${seen} = ${bound})` : bound});`
             );
         }),
-        // Bryc's accessor (`stateBinding`): the rows of an `{#each}` follow
+        // Brycomp's accessor (`stateBinding`): the rows of an `{#each}` follow
         // the value's own changes and what they read under it
         // (`__pybridge.walk`). A store's name keeps JavaScript's array as it
         // was handed until Python reads it (`storeTrack`, `storeHeld`).
@@ -3100,7 +3100,7 @@ const liveExports = (c) =>
               ...liveExportLines(ROUTE_ACTIONS, { ...c, exported: c.exported.filter((n) => c.acted && n === 'actions') })
           ];
 
-// The function that runs a module's body (Bryc's `moduleLoad`): the body, the
+// The function that runs a module's body (Brycomp's `moduleLoad`): the body, the
 // refusals that read what it bound, the exports it filled, and a store's
 // effects. A `.remote.py` is eager, loaded by SvelteKit when it decides, as a
 // route module is, and refused by it when it exports a default, and reached by
@@ -3143,7 +3143,7 @@ const serverOnly = (source) => {
 };
 
 // SvelteKit reads a route module's names off it, and refuses a default export
-// there: a `.py` exports by name only (Bryc's `moduleExports`), filled by the
+// there: a `.py` exports by name only (Brycomp's `moduleExports`), filled by the
 // body as it binds them (`liveExports`, `moduleLoad`). A server route's `load`
 // that `__js__` brings is JavaScript's, relayed as a JavaScript server
 // module's is (`jsServerLoad`).
@@ -3257,14 +3257,14 @@ function compile(
 
     if (binding !== null && !component) src = `${src}\n${binding}\n`;
 
-    // The common half, Bryc's: a component's script joined with its template's
+    // The common half, Brycomp's: a component's script joined with its template's
     // functions, a `.py` taken as it is, `importjs` lifted, Svelthon's signs
     // made Python (`HOST.rewrite`), the translation, and the imports the
     // runtime cannot satisfy refused. The name Python imports a module by; a
     // component is imported by nobody and keeps its path.
     //
     // In Svelthon's markup, and only there, the dot finds a key as well as an
-    // attribute: the template's functions are written so before Bryc joins
+    // attribute: the template's functions are written so before Brycomp joins
     // them (`templateDots`), with the bridge's `readAttr` and `writeAttr`.
     const compiled = compileCommon(HOST, src, {
         name,
@@ -3453,7 +3453,7 @@ function compile(
             ])
         ];
 
-    // What the list names that the module cannot export (Bryc's
+    // What the list names that the module cannot export (Brycomp's
     // `exportChecks`); with a `from m import *`, a name not yet bound waits
     // until the module has run.
     const { unbound, line, listedAt } = exportChecks(HOST, { declaration, declared, binds, jsImported, starred, source });

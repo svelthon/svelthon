@@ -4,7 +4,7 @@
 // process that already has one fails outright.
 
 // Everything the compiler publishes into a module's namespace, in one place:
-// the counterpart of JS_RESERVED in Bryc, and readable the same way.
+// the counterpart of JS_RESERVED in Brycomp, and readable the same way.
 //
 // Two rules, not one.
 //

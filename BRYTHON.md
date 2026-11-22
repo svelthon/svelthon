@@ -1,7 +1,7 @@
 # What Svelthon asks of Brython
 
-Svelthon compiles Python to JavaScript with Bryc, and what Bryc asks of Brython
-is Bryc's contract, kept with it. At run time Svelthon reaches the engine
+Svelthon compiles Python to JavaScript with Brycomp, and what Brycomp asks of Brython
+is Brycomp's contract, kept with it. At run time Svelthon reaches the engine
 through Bryntime alone, and what Bryntime asks of Brython is Bryntime's
 contract, kept with it.
 
@@ -11,7 +11,7 @@ Almost none of it is a public API: it is the shape of Brython's internals. This
 file is the contract, so that a Brython change can be checked against it, and
 so that whoever reads `src/lib/` knows which assumptions are load-bearing.
 
-Verified against the engine Bryve ships, `$B.version_info == [3, 14, 0]`.
+Verified against the engine Bryvend ships, `$B.version_info == [3, 14, 0]`.
 
 ## Internals used
 

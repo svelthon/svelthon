@@ -14,7 +14,7 @@ import { join } from 'node:path';
 // split, move or rename. Twice after the split a sentence here went on naming
 // one, a path into the package and then its list of the engine's repairs.
 // This file holds the pattern, so it is the one file not read. An import of a
-// file beside the one that imports it, Bryc's `./errors.js`, names its own.
+// file beside the one that imports it, Brycomp's `./errors.js`, names its own.
 const BRYNTIME_FILE =
     /bryntime\/[\w./-]+|BRYTHON_FIX|\b(?<!\.\/)(?:globals|boot|core|mutations|views|calls|errors|modules|protocols|brython_runtime|brython_compiler)\.js\b/;
 
@@ -58,7 +58,7 @@ test('Svelthon depends on Bryntime and keeps no copy of it or of the engine', ()
 // Svelthon reaches Bryntime through the package's entry alone, which starts the
 // engine and exports what Bryntime gives, so each of its files stays
 // Bryntime's own to split or to move. The engine's other half, the parsing
-// chain, is Bryc's to load, not its host's.
+// chain, is Brycomp's to load, not its host's.
 test('Svelthon reaches Bryntime through its entry alone', () => {
     const doors = readdirSync('src/lib')
         .filter((file) => /\.c?js$/.test(file))

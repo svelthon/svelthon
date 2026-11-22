@@ -1,16 +1,16 @@
 // @vitest-environment node
 //
-// **Svelthon reaches Bryc by its name alone**, `bryc`, the one module its
+// **Svelthon reaches Brycomp by its name alone**, `brycomp`, the one module its
 // package exports: no file of Svelthon imports, requires or names a file of
-// it, which stay Bryc's to split, move or rename. What Bryc holds and reaches
-// is Bryc's to guard, in its own tests.
+// it, which stay Brycomp's to split, move or rename. What Brycomp holds and reaches
+// is Brycomp's to guard, in its own tests.
 import { test, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-// A file of Bryc's, by its path into the package. This file holds the pattern,
+// A file of Brycomp's, by its path into the package. This file holds the pattern,
 // so it is the one file not read.
-const BRYC_FILE = /\bbryc\/[\w./-]*\.[cm]?js\b/;
+const BRYCOMP_FILE = /\bbrycomp\/[\w./-]*\.[cm]?js\b/;
 
 // The files under `dir` that `keep` takes, by their path from it, past what is
 // installed, built or a scratch probe.
@@ -32,16 +32,16 @@ const IMPORTED = /(?:^\s*(?:import|export)\b[^'"]*?\bfrom\s+|^\s*\}\s*from\s+|^\
 
 const files = () => [
     ...within('src', (file) => /\.[cm]?js$/.test(file)),
-    ...within('tests', (file) => /\.[cm]?js$/.test(file) && file !== 'bryc-door.test.js'),
+    ...within('tests', (file) => /\.[cm]?js$/.test(file) && file !== 'brycomp-door.test.js'),
     ...within('scripts', (file) => /\.(sh|[cm]?js)$/.test(file))
 ];
 
-test('nothing of Svelthon names a file of Bryc', () => {
+test('nothing of Svelthon names a file of Brycomp', () => {
     const named = files().flatMap((file) =>
         readFileSync(file, 'utf8')
             .split('\n')
             .map((line, index) => [`${file}:${index + 1}`, line])
-            .filter(([, line]) => BRYC_FILE.test(line))
+            .filter(([, line]) => BRYCOMP_FILE.test(line))
             .map(([where, line]) => `${where}: ${line.trim()}`)
     );
 
@@ -49,14 +49,14 @@ test('nothing of Svelthon names a file of Bryc', () => {
     expect(named).toEqual([]);
 });
 
-test('and what imports Bryc imports it by its name', () => {
+test('and what imports Brycomp imports it by its name', () => {
     const imported = files().flatMap((file) =>
         readFileSync(file, 'utf8')
             .split('\n')
             .flatMap((line, index) => [...line.matchAll(IMPORTED)].map(([, to]) => [`${file}:${index + 1}`, to]))
-            .filter(([, to]) => /(^|\/)bryc\b/.test(to))
+            .filter(([, to]) => /(^|\/)brycomp\b/.test(to))
     );
 
-    expect(imported.filter(([, to]) => to !== 'bryc')).toEqual([]);
+    expect(imported.filter(([, to]) => to !== 'brycomp')).toEqual([]);
     expect(imported.map(([where]) => where.replace(/:\d+$/, ''))).toEqual(['src/lib/compile.js', 'src/lib/markup.js']);
 });

@@ -23,15 +23,15 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The compiler's text: this file's own, and Bryc's, every file beside the
+// The compiler's text: this file's own, and Brycomp's, every file beside the
 // module its package exports, where the module body's wrapper is written under
 // the name the host's runtime gives `pyError`.
-const BRYC = dirname(fileURLToPath(import.meta.resolve('bryc')));
+const BRYCOMP = dirname(fileURLToPath(import.meta.resolve('brycomp')));
 const source = [
     readFileSync(fileURLToPath(new URL('../src/lib/compile.js', import.meta.url)), 'utf8'),
-    ...readdirSync(BRYC)
+    ...readdirSync(BRYCOMP)
         .filter((file) => file.endsWith('.js'))
-        .map((file) => readFileSync(join(BRYC, file), 'utf8'))
+        .map((file) => readFileSync(join(BRYCOMP, file), 'utf8'))
 ].join('\n');
 
 // What a crossing is made of, in the runtime's own words.

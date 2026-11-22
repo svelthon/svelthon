@@ -1663,7 +1663,7 @@ function pythonImports(names, fromDirectory, path) {
 }
 
 // A `.py` is served twice. Under the query, the module itself, whose body waits
-// for an import (`moduleLoad` in Bryc). Under its own path, what
+// for an import (`moduleLoad` in Brycomp). Under its own path, what
 // JavaScript and SvelteKit import: the same module, its body run as this one is
 // evaluated, as importing a JavaScript module runs it. One module behind both,
 // so a name Python changes is the name JavaScript reads.

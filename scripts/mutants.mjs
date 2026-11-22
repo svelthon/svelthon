@@ -71,7 +71,7 @@ const inParts = (file, line) => parts === undefined || parts.some((one) => one.f
 if (existsSync(REPORT)) renameSync(REPORT, REPORT.replace(/(\.txt)?$/, '.previous.txt'));
 
 // The copy: the commit's files, and the installed packages by a link each, the
-// links Bryntime, Bryc and Bryve are installed by among them. Not Vite's caches,
+// links Bryntime, Brycomp and Bryvend are installed by among them. Not Vite's caches,
 // which are written while a suite runs, and are this copy's own.
 const COMMIT = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim();
 const TREE = mkdtempSync(join(tmpdir(), 'svelthon-mutants-'));
@@ -259,7 +259,7 @@ for (const [index, site] of chosen.entries()) {
     // bounds a test; a loop that never ends inside the *transform* is Vite
     // compiling, before any test exists, and nothing there is bounded.
     //
-    // The shape is reachable, and was met while Bryc lived in `src/lib`: its VLQ
+    // The shape is reachable, and was met while Brycomp lived in `src/lib`: its VLQ
     // encoder shifts with `>>>=` and stops at `while (rest > 0)`, so `>` → `>=`
     // never terminates. It is the arithmetic and boundary rules that do this —
     // `+` ↔ `-`, `<` → `<=`, `>` → `>=` — which is to say the ones added to
