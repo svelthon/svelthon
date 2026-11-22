@@ -121,14 +121,15 @@ const shownPath = (filename, root) => (filename ? relative(root, filename) : 'Co
 //
 // A claim is never released, the registry living as long as the process, so the
 // last condition reads the disk: **a first claimant that is no longer there is
-// not a collision, it is a rename.** The refusal keeps the case it is for, two
-// files that both exist.
+// not a collision, it is a rename.** Nor is one that no longer compiles to the
+// name (`stillClaims`): a component turned to JavaScript, a module a directory
+// replaced. The refusal keeps the case it is for, two files that both compile.
 export const nameFor = (filename, root) => {
     const path = shownPath(filename, root);
     const name = mangle(filename, root);
     const first = claimed.get(generatedKey(root, name));
 
-    if (first !== undefined && first !== path && existsSync(resolve(root, first))) {
+    if (first !== undefined && first !== path && stillClaims(resolve(root, first))) {
         throw new SyntaxError(
             `svelthon — \`${path}\` and \`${first}\` both compile to the module name ` +
                 `\`${name}\`, so one would silently run the other's Python. Rename ` +
@@ -160,7 +161,7 @@ function claimPython(path, root) {
 
     const first = pythonClaimed.get(generatedKey(root, name));
 
-    if (first !== undefined && first !== path && existsSync(resolve(root, first))) {
+    if (first !== undefined && first !== path && stillClaims(resolve(root, first))) {
         throw new SyntaxError(
             `svelthon — \`${path}\` and \`${first}\` are both imported as \`${name}\`, ` +
                 `so one would silently replace the other. Rename one of them: a module's ` +
@@ -171,6 +172,10 @@ function claimPython(path, root) {
 
     pythonClaimed.set(generatedKey(root, name), path);
 }
+
+// Whether a file still compiles to the name it claimed: a file, a module of
+// Python or a component still written in it.
+const stillClaims = (file) => isFile(file) && (file.endsWith('.py') || pythonFile(file));
 
 // The tag that decides a file is Python is read by `pythonScript`, in markup.js,
 // off the real script blocks and their real attributes, the same grammar that

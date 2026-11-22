@@ -12,6 +12,9 @@
 // 'virtual:svelthon/src_ui_card_svelte'` means one runs the other's Python
 // module body, silently, which is the failure this project refuses.
 import { test, expect, describe } from 'vitest';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { nameFor, svelthon } from '../src/lib/svelthon.js';
 
@@ -63,6 +66,27 @@ describe('two files that mangle to one module name', () => {
         compile('tests/fixtures/renamed-away.svelte');
 
         expect(() => compile('tests/fixtures/renamed_away.svelte')).not.toThrow();
+    });
+
+    // Nor is a first claimant that no longer compiles to the name: a component
+    // turned to JavaScript under a running dev server, whose name a component
+    // turned to Python then takes.
+    test('a first claimant turned to JavaScript is a rename, not a collision', () => {
+        const root = mkdtempSync(join(tmpdir(), 'svelthon-claims-'));
+        const python = '<script lang="python">\nlabel = "x"\n</script>\n<p>{label}</p>\n';
+
+        writeFileSync(join(root, 'theme-card.svelte'), python);
+        writeFileSync(join(root, 'theme_card.svelte'), '<p>native</p>\n');
+
+        try {
+            nameFor(join(root, 'theme-card.svelte'), root);
+            writeFileSync(join(root, 'theme-card.svelte'), '<script>\nconst label = "x";\n</script>\n<p>{label}</p>\n');
+            writeFileSync(join(root, 'theme_card.svelte'), python);
+
+            expect(() => nameFor(join(root, 'theme_card.svelte'), root)).not.toThrow();
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 
     // And the new claimant takes the name over, rather than the registry keeping

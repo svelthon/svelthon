@@ -10,6 +10,9 @@
 // `import` can write is never claimed, and SvelteKit gives every route of a kind
 // the same one.
 import { test, expect, describe } from 'vitest';
+import { mkdtempSync, mkdirSync, writeFileSync, unlinkSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { nameFor as claimIn } from '../src/lib/svelthon.js';
 
 // The project these paths are written from, the directory the suite runs in.
@@ -38,6 +41,26 @@ describe('two Python modules of one name', () => {
         nameFor('tests/fixtures/gone/panier.svelte.py');
 
         expect(() => nameFor('tests/fixtures/moved/panier.svelte.py')).not.toThrow();
+    });
+
+    // Nor is one that no longer compiles to the name, under a running dev
+    // server: a module a directory replaced, beside another file of its name.
+    test('a first claimant a directory replaced is a rename, not a collision', () => {
+        const root = mkdtempSync(join(tmpdir(), 'svelthon-claims-'));
+
+        mkdirSync(join(root, 'lib'));
+        writeFileSync(join(root, 'settings.py'), 'label = "sibling"\n');
+        writeFileSync(join(root, 'lib', 'settings.py'), 'label = "library"\n');
+
+        try {
+            claimIn(join(root, 'settings.py'), root);
+            unlinkSync(join(root, 'settings.py'));
+            mkdirSync(join(root, 'settings.py'));
+
+            expect(() => claimIn(join(root, 'lib', 'settings.py'), root)).not.toThrow();
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 
     // A watched file is recompiled on every edit. Claiming the same path again
