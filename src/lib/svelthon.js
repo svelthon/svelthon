@@ -2,8 +2,7 @@ import { TraceMap, traceSegment } from '@jridgewell/trace-mapping';
 import { createHash, randomBytes } from 'node:crypto';
 import { relative, resolve, dirname, basename } from 'node:path';
 import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import * as nodeModule from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 import {
     overMarkup,
@@ -1725,16 +1724,6 @@ const transportWrapper = (real, server) =>
 const KIT_SERVER = '$app/server';
 const REMOTE_SERVER = '\0svelthon-remote-server?';
 
-// Whether Node finds the Bryntime this plugin compiles with by its name from a
-// directory, as it will from a server built there, as Node 22.14 and 23.2 tell
-// it (`findPackageJSON`).
-const runtimeNamedFrom = (root) => {
-    try {
-        return realpathSync(nodeModule.findPackageJSON('bryntime', pathToFileURL(resolve(root, 'package.json')))) === realpathSync(nodeModule.findPackageJSON('bryntime', import.meta.url));
-    } catch {
-        return false;
-    }
-};
 const remoteServer = (real) =>
     [
         `export * from ${JSON.stringify(real)};`,
@@ -2206,7 +2195,7 @@ export function svelthon(options = {}) {
     let kitServer = KIT_SERVER;
 
     let building = false;
-    let runtimeNamed;
+    let throughSvelthon;
 
     const fileOf = (path) => {
         if (preserveSymlinks) return path;
@@ -2517,21 +2506,17 @@ export function svelthon(options = {}) {
         resolveId(specifier, importer, options) {
             // A server built asks Node for the plugin's Bryntime, the file the
             // plugin loaded, as SvelteKit's prerendering worker loads the
-            // plugin with its configuration: by its name where Node finds that
-            // file by it from the application (`runtimeNamedFrom`), and through
-            // Svelthon elsewhere (`svelthon/bryntime`), which Node finds from
-            // the application and Bryntime from it. Asked by its name, a
+            // plugin with its configuration: through Svelthon
+            // (`svelthon/bryntime`) where the application finds Svelthon, as
+            // it finds one installed, and Node Bryntime from it; by its name
+            // for a plugin imported by its path. Asked by its name, a
             // Bryntime installed under Svelthon alone was found from nowhere,
-            // built in beside the plugin's, and refused as a second copy. On a
-            // Node before 22.14, whether Vite finds it from the application at
-            // all: taken for found, it was not found there either.
+            // and one the application had of its own was a second copy beside
+            // the plugin's.
             if (specifier === 'bryntime' && building && options?.ssr) {
-                runtimeNamed ??=
-                    nodeModule.findPackageJSON === undefined
-                        ? this.resolve(specifier, resolve(routes, 'package.json'), { skipSelf: true }).then((found) => found !== null)
-                        : runtimeNamedFrom(routes);
+                throughSvelthon ??= this.resolve('svelthon/bryntime', resolve(routes, 'package.json'), { skipSelf: true }).then((found) => found !== null);
 
-                return Promise.resolve(runtimeNamed).then((named) => ({ id: named ? specifier : 'svelthon/bryntime', external: true }));
+                return throughSvelthon.then((through) => ({ id: through ? 'svelthon/bryntime' : specifier, external: true }));
             }
 
             if (specifier === KIT_TRANSPORT) {
