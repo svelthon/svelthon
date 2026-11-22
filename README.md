@@ -1727,6 +1727,11 @@ A member whose name is a Python keyword, `Array.from`, `promise.finally` or
 `field.as` of a SvelteKit form, cannot be written after a dot: Python's parser
 stops at the keyword. `getattr` reads it: `getattr(js.Array, "from")("ab")`.
 
+A plain JavaScript object reads as a mapping of its own properties, so one that
+holds none is false, as an empty dict is. A SvelteKit form's `fields` is one for
+now, a proxy over `{}` that answers every name and lists none, so
+`if form.fields:` is false: ask a field itself, `form.fields.title.issues()`.
+
 A JavaScript class called constructs, as calling a class does in Python:
 `js.URL("http://x/y")`, `js.Map()` or `Kind(3)` imported from a module is
 `.new(...)`, under Node and in a browser alike, and `isinstance` answers as

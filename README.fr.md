@@ -1807,6 +1807,12 @@ Un membre dont le nom est un mot-clé de Python, `Array.from`,
 après un point : l'analyseur de Python s'arrête au mot-clé. `getattr` le lit :
 `getattr(js.Array, "from")("ab")`.
 
+Un objet JavaScript nu se lit comme un mapping de ses propriétés propres : celui
+qui n'en a aucune est faux, comme un dict vide. Les `fields` d'un formulaire
+SvelteKit en sont un pour l'instant, un proxy sur `{}` qui répond à tous les noms
+sans en lister aucun : `if form.fields:` est faux, on interroge le champ lui-même,
+`form.fields.title.issues()`.
+
 Une classe JavaScript appelée construit, comme l'appel d'une classe en Python :
 `js.URL("http://x/y")`, `js.Map()` ou `Kind(3)` importé d'un module valent
 `.new(...)`, sous Node comme dans un navigateur, et `isinstance` répond comme
