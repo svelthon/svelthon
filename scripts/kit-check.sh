@@ -66,6 +66,14 @@ fi
 
 echo "✓ kit build — adapter-node"
 
+# A page rendered as the application builds, in the process the plugin
+# compiles in: one Bryntime serves both, where a second copy said so.
+if grep -qF 'prerendered: 6' "$APP/build/prerendered/prerendered.html" 2>/dev/null; then
+    echo "✓ kit prerender — a page rendered at build, by the plugin's own Bryntime"
+else
+    echo "✗ kit prerender — $(grep -m1 -iE 'loaded twice|error' "$LOG" || echo 'no build/prerendered/prerendered.html')"
+fi
+
 (cd "$APP" && PORT=$PORT exec node build/index.js) >"$LOG" 2>&1 &
 SERVER=$!
 

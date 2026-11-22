@@ -2421,6 +2421,12 @@ export function svelthon(options = {}) {
         // `window`. Installed from npm, a server with a DOM on its global was a
         // browser again; a linked checkout, which Vite transforms, was not.
         //
+        // And one Bryntime for every importer, the one the plugin itself
+        // compiles with: left to Node on the server, whose cache hands the copy
+        // already loaded, and deduplicated for the browser. A second copy on
+        // the plugin's engine, a linked checkout Vite transformed for the page
+        // it rendered, kept a state of its own and followed nothing.
+        //
         // And the dependency scanner handed what a Python script imports from
         // JavaScript rather than its Python (`pythonScan`), by Rolldown's
         // option or by esbuild's, whichever scans: Vite 8 warns of the second.
@@ -2436,7 +2442,11 @@ export function svelthon(options = {}) {
                 ? { rolldownOptions: { plugins: [pythonScan(found)] } }
                 : { esbuildOptions: { plugins: [pythonScanEsbuild(found)] } };
 
-            return { ssr: { noExternal: ['svelthon'] }, optimizeDeps: { ...scan, extensions: ['.py'] } };
+            return {
+                ssr: { noExternal: ['svelthon'], external: ['bryntime'] },
+                resolve: { dedupe: ['bryntime'] },
+                optimizeDeps: { ...scan, extensions: ['.py'] }
+            };
         },
         // SvelteKit refuses to build code that runs in the browser and imports a
         // module of a `server/` directory, a `*.server.*` file or `$app/server`.
