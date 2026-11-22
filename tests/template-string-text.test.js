@@ -51,7 +51,16 @@ test.for([
     ['spaced', "(' row.name = ', '')|[(' row.name ', 'Ada', 'r', '')]"],
     ['converted', "('row.name=', '')|[('row.name', 'Ada', 's', '')]"],
     ['formatted', "('row.name=', '')|[('row.name', 'Ada', None, '>5')]"],
-    ['nested', "('', '')|[('row.name', 'Ada', None, '>5')]"]
+    ['nested', "('', '')|[('row.name', 'Ada', None, '>5')]"],
+    // Between triple quotes, which no longer compiled.
+    ['triple', "('', '')|[('x', 3, None, '')]"],
+    ['lined', "('a\\n', '')|[('x', 3, None, '')]"],
+    // A debug field after text, its label and the text one constant to the
+    // parser.
+    ['texted', "('x: row.name=', '')|[('row.name', 'Ada', 'r', '')]"],
+    ['twice', "('row.name=', ' and record.name=', '')|[('row.name', 'Ada', 'r', ''), ('record.name', 'Grace', 'r', '')]"],
+    ['joined', "('arow.name=', 'b', '')|[('row.name', 'Ada', 'r', ''), ('record.name', 'Grace', None, '')]"],
+    ['escaped', "('• row.name=', '')|[('row.name', 'Ada', 'r', '')]"]
 ])('t"…" %s is written as Python writes it', ([k, expected]) => {
     const target = document.body.appendChild(document.createElement('div'));
 
