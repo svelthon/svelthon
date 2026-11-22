@@ -1,6 +1,6 @@
 # What a server hands a page, through SvelteKit's transport (`transport.js`).
 __all__ = [
-    "values", "load", "layout", "merge_layout", "merge_section", "merge_page", "walked", "pointed", "streamed", "actions", "one", "two", "callables", "lossy", "unpicklable",
+    "values", "shared_complex", "load", "layout", "merge_layout", "merge_section", "merge_page", "walked", "pointed", "streamed", "actions", "one", "two", "callables", "lossy", "unpicklable",
     "remote_lossy", "remote_batch", "remote_live", "remote_hook", "bumped", "kept", "stored", "STORE", "hooked", "Point",
     "Money", "describe", "data_of",
 ]
@@ -85,6 +85,12 @@ class Single:
 
 
 SINGLE = Single()
+
+
+# One complex held in three places, and another of the same value.
+def shared_complex():
+    chosen = complex(1, -2)
+    return {"selected": chosen, "samples": [chosen, complex(1, -2)], "again": chosen}
 
 
 def values():

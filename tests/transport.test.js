@@ -9,6 +9,7 @@ import { pickled, unpickled } from 'bryntime';
 import { __brycomp_pybridge, pyBind, routeLoad, routeServerLoad, routeActions, routeData, remoteHelper } from '../src/lib/bridge.js';
 import {
     values,
+    shared_complex,
     load,
     layout,
     merge_layout,
@@ -729,6 +730,24 @@ test.for([
 
     try {
         expect([view, devalue.parse(made, { svelthon: decode }).value]).toEqual([parts, parts]);
+    } finally {
+        globalThis[CODEC] = codec;
+        codecLoaded();
+    }
+});
+
+// And one complex held in several places is one copy, as a list is: a page
+// looking it up among the others found it on the server and nowhere after.
+test('a complex held in several places is one copy to a page with no engine, another of its value another', () => {
+    const made = devalue.stringify({ value: viewOrSelf(pyBind(shared_complex())) }, { svelthon: encode });
+    const codec = globalThis[CODEC];
+
+    delete globalThis[CODEC];
+
+    try {
+        const { selected, samples, again } = devalue.parse(made, { svelthon: decode }).value;
+
+        expect([samples.indexOf(selected), again === selected, samples[1] === selected, samples[1]]).toEqual([0, true, false, { real: 1, imag: -2 }]);
     } finally {
         globalThis[CODEC] = codec;
         codecLoaded();

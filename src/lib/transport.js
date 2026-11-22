@@ -255,8 +255,9 @@ function copied(made, memo) {
         // A coroutine's result, streamed pickled: the promise of its copy.
         case 'a':
             return keep(Promise.resolve(made[1]).then((structure) => copied(structure, new Map())));
+        // One copy for the one complex, wherever it is held, as a list's.
         case 'c':
-            return Object.freeze({ real: made[1], imag: made[2] });
+            return keep(Object.freeze({ real: made[1], imag: made[2] }));
         // A JavaScript shape around the copies of the values it holds.
         case 'J': {
             const values = copied(made[2], memo);
