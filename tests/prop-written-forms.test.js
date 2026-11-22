@@ -11,6 +11,29 @@ import PropReadOnly from './fixtures/PropReadOnly.svelte';
 import PropDefinedBy from './fixtures/PropDefinedBy.svelte';
 import PropLocalsCountParent from './fixtures/PropLocalsCountParent.svelte';
 import PropGlobalsCountParent from './fixtures/PropGlobalsCountParent.svelte';
+import PropShadowedGlobalsParent from './fixtures/PropShadowedGlobalsParent.svelte';
+
+// A `globals` of the author's, a function of the module or a parameter, is no
+// door: what it reads at a key, `globals()["ticket"]["state"] = …`, writes a
+// dict of theirs and no prop, which follows its parent. Taken for the
+// builtin by its name, the prop was held as one the module writes, and stayed
+// the first ticket.
+test("a globals() of the author's writes no prop, which follows its parent", () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(PropShadowedGlobalsParent, { target });
+    const read = (k) => target.querySelector(`[data-k="${k}"]`).textContent;
+    const seen = [];
+
+    flushSync();
+    for (const ticket of ['t2', 't3']) {
+        seen.push(read('ticket'));
+        instance.next(ticket);
+        flushSync();
+    }
+    seen.push(read('ticket'), read('state'));
+
+    expect(seen).toEqual(['t1', 't2', 't3', 'saved|saved']);
+});
 
 test('every way of binding a module name writes the prop, as Python writes it', async () => {
     const target = document.body.appendChild(document.createElement('div'));

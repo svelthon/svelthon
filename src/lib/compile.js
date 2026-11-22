@@ -210,6 +210,23 @@ function refuseNamespaceWrites(tree, table, source, ranges, lineOffset) {
 // written, `globals()["ticket"]["label"] = 1`, a part of that prop.
 const NAMESPACE_READS = new Set(['get', 'keys', 'values', 'items', 'copy', '__contains__', '__getitem__']);
 
+// The calls of `globals()` that are the builtin, where Python finds it, which
+// no scope binds (`builtinIn`): one of a `globals` the author defined, or a
+// parameter of that name, is theirs, and what it reads at a key no prop.
+function builtinGlobals(table, body) {
+    const ast = $B.ast;
+    const builtin = builtinIn(table, moduleBinds(table));
+    const calls = new Set();
+
+    walkScoped(body, (node, scope) => {
+        if (node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === 'globals' && node.args.length === 0 && builtin('globals', scope)) {
+            calls.add(node);
+        }
+    });
+
+    return calls;
+}
+
 function writtenProps(table, body, props, annotatedAt) {
     const written = new Set();
 
@@ -218,8 +235,8 @@ function writtenProps(table, body, props, annotatedAt) {
     const ast = $B.ast;
     const wanted = new Set(props);
     const scopes =[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
-    const namespace = (node) =>
-        node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === 'globals' && node.args.length === 0;
+    const doors = builtinGlobals(table, body);
+    const namespace = (node) => doors.has(node);
     const literal = (node) => (node instanceof ast.Constant && typeof node.value === 'string' ? node.value : null);
     const LOOKUPS = ['get', '__getitem__', 'setdefault'];
     // `globals().get("ticket")`, or as the template spells it,
@@ -442,7 +459,7 @@ function publishedNames(text, starNames = () => null) {
 function unboundReads(table, taken, body) {
     const binds = moduleBinds(table);
 
-    return [...new Set([...globalReads(table), ...namespaceKeys(body).read])].filter(
+    return [...new Set([...globalReads(table), ...namespaceKeys(table, body).read])].filter(
         (name) =>
             IDENTIFIER.test(name) &&
             !binds.has(name) &&
@@ -461,10 +478,11 @@ const IDENTIFIER = /^[\p{ID_Start}_][\p{ID_Continue}]*$/u;
 // writes nothing through (`refuseNamespaceWrites`). A method the template
 // reads off it is `__brycomp_getattr(globals(), "get")`, its dot rewritten
 // (`templateDots`).
-function namespaceKeys(body) {
+function namespaceKeys(table, body) {
     const ast = $B.ast;
     const read = new Set();
-    const namespace = (node) => node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === 'globals' && node.args.length === 0;
+    const doors = builtinGlobals(table, body);
+    const namespace = (node) => doors.has(node);
     const literal = (node) => (node instanceof ast.Constant && typeof node.value === 'string' ? node.value : null);
     const owner = (func) => (func instanceof ast.Attribute ? func.value : func instanceof ast.Call && func.func instanceof ast.Name && func.func.id === RUNTIME.readAttr ? func.args[0] : null);
     const method = (func) => (func instanceof ast.Attribute ? func.attr : literal(func.args[1]));
