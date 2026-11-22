@@ -883,15 +883,18 @@ Où on en est, chaque ligne tenue par un test :
 | à travers un `@derived` qui rend l'objet, ou un prop de composant | oui |
 | un enfant atteint par `.items()`, `.values()` ou `.get()` | oui |
 | `<p {**attrs}>`, un étalement | oui |
-| `<p title={items}>`, un attribut portant le conteneur lui-même | non, **et JavaScript non plus** |
+| `<p title={items}>`, un attribut portant le conteneur lui-même | oui, **là où JavaScript non** |
 | `store.rows.push(x)`, le conteneur d'un store muté depuis JavaScript, un tableau qu'il a reçu aussi | oui |
 
-Le `non` est la sémantique de l'hôte, pas une limite à nous : Svelte
-compare la valeur à celle qu'il a appliquée la fois d'avant, par identité, dans
-son propre écrivain DOM, où aucun signal n'atteint, et un conteneur muté est le
-même objet. Un composant Svelte idiomatique avec `$state` se comporte exactement
-pareil, ce que `tests/parity.test.js` démontre en faisant tourner le même
-composant dans les deux langages, ligne pour ligne.
+Une valeur seule dans un attribut de texte s'écrit comme Python l'écrit, comme
+avec du texte autour : `title={items}` vaut `['a', 'b']`, `title={1.0}` vaut
+`1.0`, un dict son `repr`, et le texte change quand la liste a changé. None, un
+booléen, `class`, `style` et une `value` gardent leur sens pour l'attribut, et la
+propriété d'un élément personnalisé prend la valeur telle quelle. Un composant
+Svelte idiomatique écrit le `a,b` du tableau et le garde après un changement sur
+place, puisque Svelte compare la valeur à celle qu'il a appliquée la fois
+d'avant, par identité : le seul écart que `tests/parity.test.js` documente, en
+faisant tourner le même composant dans les deux langages, ligne pour ligne.
 
 Les noms d'un store sont des états comme le `$state` de Svelte en est un, au
 même coût : un tableau ou un objet simple que JavaScript donne à un store,
@@ -1916,7 +1919,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 218 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 220 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

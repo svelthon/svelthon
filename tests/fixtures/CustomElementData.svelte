@@ -6,6 +6,7 @@ empty = []
 attrs = {"open": ["c"], "hidden": ["d"]}
 tag = "svelthon-probe"
 hidden = ["e"]
+payload = ["f"]
 standard = "details"
 switched = "details"
 
@@ -24,5 +25,8 @@ def swap():
 <svelte:element this={tag} data-k="shorthand" {hidden}></svelte:element>
 <svelte:element this={tag} data-k="dynamicSpread" {**attrs}></svelte:element>
 <svelte:element this={standard} data-k="dynamicStandard" open={empty}></svelte:element>
-<svelte:element this={switched} data-k="switched" open={data} />
+<svelte:element this={switched} data-k="switched" open={data} payload={data} />
+<svelte:element this={tag} data-k="payload" payload={data}></svelte:element>
+<svelte:element this={tag} data-k="payloadShorthand" {payload}></svelte:element>
+<svelte:element this={tag} data-k="payloadQuoted" payload="{data}"></svelte:element>
 <button data-k="switch" onclick={swap}>switch</button>

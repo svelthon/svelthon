@@ -24,6 +24,14 @@ class Probe extends HTMLElement {
     set hidden(value) {
         this.held = { ...this.held, hidden: value };
     }
+
+    get payload() {
+        return this.held?.payload;
+    }
+
+    set payload(value) {
+        this.held = { ...this.held, payload: value };
+    }
 }
 
 if (!customElements.get('svelthon-probe')) customElements.define('svelthon-probe', Probe);

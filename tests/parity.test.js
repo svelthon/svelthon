@@ -27,7 +27,7 @@ const render = (Component) => {
 describe.each([
     ['JavaScript', JsAttrs],
     ['Python', PyAttrs]
-])('in-place mutation, attributes — %s', (_language, Component) => {
+])('in-place mutation, attributes — %s', (language, Component) => {
     test('a spread propagates', () => {
         const { el, mutate } = render(Component);
 
@@ -44,15 +44,18 @@ describe.each([
         expect(el('attr').getAttribute('title')).toBe('a,b');
     });
 
-    test('an attribute carrying the container itself does not propagate', () => {
+    test('an attribute carrying the container itself', () => {
         const { el, mutate } = render(Component);
+        const title = () => el('raw').getAttribute('title');
 
-        // Neither here nor in JavaScript: Svelte compares the value to the one
-        // it wrote last time, by identity, and a mutated container is the same
-        // object. This is not a Svelthon limitation, it is the host's own
-        // semantics — and this test is here to prove it on both sides.
-        expect(el('raw').getAttribute('title')).toBe('a');
+        // The one divergence chosen here. JavaScript writes the array's own
+        // text, and Svelte, which compares the value to the one it wrote last
+        // time by identity, keeps it after a change in place: the same object.
+        // Python writes the list as Python writes it, as it does with text
+        // around it, and that text is another once the list has changed.
+        const before = title();
+
         mutate();
-        expect(el('raw').getAttribute('title')).toBe('a');
+        expect([before, title()]).toEqual(language === 'Python' ? ["['a']", "['a', 'b']"] : ['a', 'a']);
     });
 });

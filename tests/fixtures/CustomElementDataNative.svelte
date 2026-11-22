@@ -7,6 +7,7 @@
     let attrs = { open: ['c'], hidden: ['d'] };
     let tag = 'svelthon-probe';
     let hidden = ['e'];
+    let payload = ['f'];
     let standard = 'details';
     let switched = $state('details');
 </script>
@@ -21,5 +22,8 @@
 <svelte:element this={tag} data-k="shorthand" {hidden}></svelte:element>
 <svelte:element this={tag} data-k="dynamicSpread" {...attrs}></svelte:element>
 <svelte:element this={standard} data-k="dynamicStandard" open={empty}></svelte:element>
-<svelte:element this={switched} data-k="switched" open={data} />
+<svelte:element this={switched} data-k="switched" open={data} payload={data} />
+<svelte:element this={tag} data-k="payload" payload={data}></svelte:element>
+<svelte:element this={tag} data-k="payloadShorthand" {payload}></svelte:element>
+<svelte:element this={tag} data-k="payloadQuoted" payload="{data}"></svelte:element>
 <button data-k="switch" onclick={() => (switched = switched === 'details' ? 'svelthon-probe' : 'details')}>switch</button>

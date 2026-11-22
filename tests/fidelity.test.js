@@ -180,9 +180,9 @@ describe('template — the Python/JavaScript boundary', () => {
         expect(cell('gt')).toBe('inside a tag'); // '>' inside a quoted attribute
     });
 
-    test('an attribute value keeps the value, not its rendering', () => {
+    test('an attribute value alone renders the Python way too', () => {
         const el = render(Template).querySelector('[data-k="attr"]');
-        expect(el.dataset.v).toBe('a,b,c'); // unwrapped: the list itself
+        expect(el.dataset.v).toBe("['a', 'b', 'c']"); // as it would with text around it
     });
 });
 

@@ -854,15 +854,18 @@ Where it stands, each line held by a test:
 | through a `@derived` that hands back the object, or a component prop | yes |
 | a child reached through `.items()`, `.values()` or `.get()` | yes |
 | `<p {**attrs}>`, a spread | yes |
-| `<p title={items}>`, an attribute carrying the container itself | no, **and neither does JavaScript** |
+| `<p title={items}>`, an attribute carrying the container itself | yes, **where JavaScript does not** |
 | `store.rows.push(x)`, a store's container mutated from JavaScript, an array it was handed too | yes |
 
-The `no` is host semantics, not a limitation of ours: Svelte compares the
-value against the one it last applied, by identity, inside its own DOM writer,
-where no signal reaches, and a mutated container is the same object. An
-idiomatic Svelte component with `$state` behaves exactly the same, which
-`tests/parity.test.js` proves by running the same component in both languages,
-line for line.
+A value alone in an attribute of text is written as Python writes it, as it is
+with text around it: `title={items}` is `['a', 'b']`, `title={1.0}` is `1.0`, a
+dict its `repr`, and the text is another once the list has changed. None, a
+boolean, `class`, `style` and a `value` keep their meaning to the attribute, and
+a custom element's property takes the value as it is. An idiomatic Svelte
+component writes the array's own `a,b` and keeps it after a change in place,
+since Svelte compares the value against the one it last applied, by identity:
+the one divergence `tests/parity.test.js` documents, running the same component
+in both languages, line for line.
 
 A store's names are states as Svelte's `$state` is one, at the same cost: an
 array or a plain object JavaScript hands a store, `store.rows = [...]` or
@@ -1874,7 +1877,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 218 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 220 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

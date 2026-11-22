@@ -29,9 +29,13 @@ const received = (Component) => {
 
     // A `<svelte:element>` whose name becomes a custom element's as the page
     // runs, and a standard element's again: what it renders, and what its
-    // `open` is handed, each time.
+    // `open` is handed, each time, and the text its `payload` is written as
+    // on the standard element, the value the custom element is handed.
+    const texts = [];
     const element = () => {
         const one = target.querySelector('[data-k="switched"]');
+
+        texts.push(one.localName === 'details' ? one.getAttribute('payload') : [...one.payload]);
 
         return { name: one.localName, open: Array.isArray(one.open) ? [...one.open] : one.open };
     };
@@ -53,9 +57,11 @@ const received = (Component) => {
             dynamic: [read('dynamic', 'open'), read('dynamic', 'hidden')],
             shorthand: read('shorthand', 'hidden'),
             dynamicSpread: [read('dynamicSpread', 'open'), read('dynamicSpread', 'hidden')],
+            payload: [read('payload', 'payload'), read('payloadShorthand', 'payload'), read('payloadQuoted', 'payload')],
             switched
         },
-        standard: [read('standard', 'open'), read('dynamicStandard', 'open')]
+        standard: [read('standard', 'open'), read('dynamicStandard', 'open')],
+        texts
     };
 };
 
@@ -71,6 +77,9 @@ test("a custom element's property is handed the value, by name and spread, a `<s
         dynamic: [list, list],
         shorthand: ['e'],
         dynamicSpread: [['c'], ['d']],
+        // A property of no table, which a value alone in an attribute of
+        // text of a standard element writes as Python writes it.
+        payload: [list, ['f'], list],
         // A `<details>` reads the list for its truth, the custom element that
         // takes its place is handed the list, and the `<details>` back reads
         // its truth again.
@@ -85,6 +94,12 @@ test("a custom element's property is handed the value, by name and spread, a `<s
     expect([python.standard, native.standard]).toEqual([
         [false, false],
         [true, true]
+    ]);
+    // The list as Python writes it on the `<details>`, as JavaScript does in
+    // Svelte, and handed as it is to the custom element in between.
+    expect([python.texts, native.texts]).toEqual([
+        ["['a', 'b']", list, "['a', 'b']"],
+        ['a,b', list, 'a,b']
     ]);
 });
 

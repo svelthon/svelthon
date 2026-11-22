@@ -1125,6 +1125,8 @@ const ADAPTERS = {
     __truthy: '__pybridge.truthy',
     __hidden: '__pybridge.hidden',
     __text: '__pybridge.str',
+    // A value alone in an attribute of text, written as `__text` writes it.
+    __attr: '__pybridge.attr',
     __html: '__pybridge.html',
     __seq: '__pybridge.seq',
     __key: '__pybridge.key',

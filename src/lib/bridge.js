@@ -802,6 +802,18 @@ export const __pybridge = {
         }
     },
 
+    // A value alone in an attribute of text (`__attr`): written as Python
+    // writes it, as it is with text around it (`str`), a list `[1, 2]` and a
+    // float `1.0`; what has a meaning of its own to an attribute crosses as a
+    // prop does (`bound`), None the absence, a boolean its presence, a
+    // callable its handler, an int and a str their own text, and a value of
+    // JavaScript's as JavaScript writes it.
+    attr(value) {
+        return value !== null && typeof value === 'object' && value !== NONE && quietPyType(value) !== undefined && !callable(value)
+            ? __pybridge.str(value)
+            : attribute(value);
+    },
+
     // `{@html}`: Python's text, but for a `TrustedHTML` an application's
     // policy made, handed as it is, which Svelte assigns to `innerHTML`
     // uncoerced. Made text, it was refused where the browser requires the
@@ -1571,6 +1583,7 @@ export const __pybridge = {
             else if (wrapper === '__truthy' && !custom && present) out[key] = __pybridge.truthy(read[key]);
             else if (wrapper === '__hidden' && !custom && present) out[key] = __pybridge.hidden(read[key]);
             else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__pybridge.bound(read[key]));
+            else if (!custom && wrapper === null && key !== 'style') out[key] = __pybridge.attr(read[key]);
         }
 
         return out;
@@ -1583,6 +1596,7 @@ export const __pybridge = {
     // its third state (`wrapper`). `value` is the Python value.
     element(tag, wrapper, value, name) {
         if (customTag(tag) || (value === NONE && !unreflected(name))) return __pybridge.bound(value);
+        if (wrapper === '__attr') return __pybridge.attr(value);
 
         return wrapper === '__hidden' ? __pybridge.hidden(value) : __pybridge.truthy(value);
     },

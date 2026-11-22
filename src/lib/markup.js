@@ -3891,12 +3891,22 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     };
 
     // Whether a tag holds what asks whether it is a custom element: an
-    // attribute of the boolean table, by name or as a shorthand, or a spread,
-    // which may give one. Any other reads its name as Svelte does.
+    // attribute of the boolean table, by name or as a shorthand, a spread,
+    // which may give one, or an attribute of text a Python value is written
+    // into, which a custom element takes as it is, `payload={rows}` a list.
+    // Any other reads its name as Svelte does.
     const asksCustom = (one) =>
         tagSpreads(markup, one.start) ||
-        [...tagNames(markup, one.start)].some((name) => TRUTH_WRAPPERS.has(attributeWrapper(name))) ||
+        [...tagNames(markup, one.start)].some((name) => TRUTH_WRAPPERS.has(attributeWrapper(name)) || pythonText(one, name)) ||
         TRUTH_NAMES.some((name) => tagValue(markup, one.start, name) !== null);
+
+    const pythonText = (one, name) => {
+        if (name === 'this' || !textAttribute(name) || name.includes(':') || name.startsWith('on')) return false;
+
+        const value = tagValue(markup, one.start, name);
+
+        return value !== null && (value.braced || markup.slice(value.start, value.end).includes('{'));
+    };
 
     const groupAction = (expr) => {
         // On an `<input>` alone, which Svelte refuses anywhere else,
@@ -4367,6 +4377,21 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         const grouped = !isComponent(tag) && tag !== null && tagNames(markup, tag.start).has('bind:group');
         const kind = toPythonChild() ? 'child' : name !== 'value' ? '' : grouped ? 'choice' : 'scalar';
+
+        // An attribute of text on an element, its value alone between the
+        // braces: written as Python writes it, as it is with text around it
+        // (`rendered`), one value having one rendering; `style` stays Svelte's,
+        // and a custom element's property takes the value as it is, as does
+        // one of a `<svelte:element>` whose name makes a custom element as it
+        // renders (`__pybridge.element`).
+        if (kind === '' && onElement(tag) && !custom(tag) && name !== 'style') {
+            if (tag.element !== undefined) {
+                return `{${readThrough(inner, call(inner, '__boxed', undefined, 'python'), (boxed) => `__pybridge.element(${tag.element}, "__attr", ${boxed}[0], ${JSON.stringify(name)})`)}}`;
+            }
+
+            return `{${unmemoized(inner, call(inner, '__attr'))}}`;
+        }
+
         const read = call(inner, '__bound', undefined, kind);
 
         return `{${onElement(tag) ? unmemoized(inner, read) : isComponent(tag) ? unmemoized(inner, read, false, 'prop') : read}}`;
