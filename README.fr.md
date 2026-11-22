@@ -1,4 +1,6 @@
-<img src="img/svelthon-512.png" alt="Svelthon" width="128">
+<div align="center">
+    <img src="img/svelthon-512.png" alt="Svelthon" width="128"/>
+</div>
 
 # Svelthon
 
@@ -606,8 +608,7 @@ sa ligne, là où Python lierait un nom à lui qui meurt avec l'expression.
 C'est tout. Tout le reste est du Python tel qu'écrit : les opérateurs, les
 tranches, les compréhensions, les f-strings, la vérité d'un objet qui définit
 `__bool__`. Les enveloppes qui font qu'une valeur Python se comporte en valeur
-Python dans le moteur de Svelte sont de la plomberie, et vivent dans
-[notes/template.md](notes/template.md).
+Python dans le moteur de Svelte sont de la plomberie.
 
 **Le langage du gabarit suit le langage du script, sans troisième mode.** Un
 composant sans `lang="python"` est un composant JavaScript et le reste, même
@@ -2060,19 +2061,6 @@ L'autre prix est au chargement : 290 Ko gzip, runtime Brython compris, et
 fois par session, pas par page, puisque l'application ne recharge jamais.
 
 ## Pour aller plus loin
-
-**Notes de conception** : [notes/architecture.md](notes/architecture.md) sur
-les cinq couches sous un composant et ce que fait chacune,
-[notes/template.md](notes/template.md) sur ce en quoi
-une expression de gabarit est compilée et les cinq adaptateurs qui la tiennent,
-[notes/directives.md](notes/directives.md) sur les quatre façons dont la valeur
-d'une directive devient du Python et sur les deux points qui restent, et [notes/dicts-and-objects.md](notes/dicts-and-objects.md) sur ce que
-valent un dict et une instance de classe à la frontière, mesuré côte à côte, et
-tenu par `tests/shapes.test.js`, et [notes/one-interpreter.md](notes/one-interpreter.md)
-sur les deux chargements de Brython dans un même processus, et ce que coûterait
-de n'en faire qu'un. [notes/crossings.md](notes/crossings.md) est l'index de la
-frontière elle-même : les treize convertisseurs en un tableau, quelle porte
-prendre, et les trois pannes qui apparaissent quand on se trompe.
 
 **Vous venez de Django ou de Flask ?** [DJANGO_FLASK.md](DJANGO_FLASK.md) met
 en regard chaque construction de gabarit courante et son équivalent Svelthon,

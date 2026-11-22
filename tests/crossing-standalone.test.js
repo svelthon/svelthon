@@ -25,7 +25,6 @@ test('no file of Svelthon names a file of Bryntime', () => {
             .map((file) => join(dir, file));
     const files = [
         ...within('src/lib', (file) => /\.[cm]?js$/.test(file)),
-        ...within('notes', (file) => file.endsWith('.md')),
         ...within('demo', (file) => /\.(js|svelte|py|html)$/.test(file)),
         ...readdirSync('tests')
             .filter((file) => file.endsWith('.js') && file !== 'crossing-standalone.test.js')

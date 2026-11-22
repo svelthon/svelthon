@@ -4,7 +4,7 @@ import Shapes from './fixtures/Shapes.svelte';
 
 // The same record in both shapes — a class instance and a dict — put through
 // every place it can be read or handed on. What differs between them is not
-// taste, and the cells below are what `notes/dicts-and-objects.md` is built on.
+// taste, and the cells below measure it.
 describe('a record as an object and as a dict', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));
@@ -72,8 +72,8 @@ describe('a record as an object and as a dict', () => {
 });
 
 // The same page written both ways. Whatever the two shapes cost elsewhere, what
-// they put on screen is identical — which is what makes the comparison in
-// notes/dicts-and-objects.md a comparison of costs rather than of results.
+// they put on screen is identical — which makes comparing them a comparison of
+// costs rather than of results.
 describe('the same page in both shapes', () => {
     const render = async (which) => {
         const { default: Component } = await import(`./fixtures/Peps${which}.svelte`);

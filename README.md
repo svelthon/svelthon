@@ -1,4 +1,6 @@
-<img src="img/svelthon-512.png" alt="Svelthon" width="128">
+<div align="center">
+    <img src="img/svelthon-512.png" alt="Svelthon" width="128"/>
+</div>
 
 # Svelthon
 
@@ -589,8 +591,7 @@ where Python would bind a name of its own that dies with the expression.
 That is the whole of it. Everything else is Python as written: the operators,
 the slices, the comprehensions, the f-strings, the truth of an object with
 `__bool__`. The wrappers that make a Python value behave like a Python value
-inside Svelte's engine are plumbing, and live in
-[notes/template.md](notes/template.md).
+inside Svelte's engine are plumbing.
 
 **The template language follows the script language, with no third mode.** A
 component without `lang="python"` is a JavaScript component and stays one, even
@@ -1984,20 +1985,6 @@ Loading is the other price: 290 KB gzip, the Brython runtime included, and
 session, not per page, since the app never reloads.
 
 ## Further reading
-
-**Design notes**: [notes/architecture.md](notes/architecture.md) on the five
-layers under a component and what each one does,
-[notes/template.md](notes/template.md) on what a template
-expression is compiled into and the five adapters under it,
-[notes/directives.md](notes/directives.md) on the four ways a directive's value
-becomes Python and the two things left over, and
-[notes/dicts-and-objects.md](notes/dicts-and-objects.md) on what a dict and a class
-instance each cost at the boundary, measured side by side, and backed by
-`tests/shapes.test.js`, and [notes/one-interpreter.md](notes/one-interpreter.md)
-on why Brython loads twice in one process and what it would take to load it once.
-[notes/crossings.md](notes/crossings.md) is the index of the boundary itself: the
-thirteen converters in one table, which door to use, and the three failures that
-show when the wrong one is chosen.
 
 **Coming from Django or Flask?** [DJANGO_FLASK.md](DJANGO_FLASK.md) maps every
 everyday template construct onto its Svelthon counterpart, the whole translation

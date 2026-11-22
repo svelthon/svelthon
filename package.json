@@ -33,7 +33,6 @@
   "files": [
     "BRYTHON.md",
     "DJANGO_FLASK.md",
-    "notes",
     "src/lib"
   ],
   "engines": {
