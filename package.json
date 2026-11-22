@@ -25,6 +25,7 @@
   "exports": {
     ".": "./src/lib/svelthon.js",
     "./bridge": "./src/lib/bridge.js",
+    "./bryntime": "./src/lib/bryntime.js",
     "./compile": "./src/lib/compile.js",
     "./markup": "./src/lib/markup.js",
     "./package.json": "./package.json"

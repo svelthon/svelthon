@@ -25,7 +25,7 @@ cleanup() {
     [ -n "${SERVER:-}" ] && kill "$SERVER" 2>/dev/null
     [ -n "${DEV:-}" ] && kill "$DEV" 2>/dev/null
     [ -n "${BROWSER:-}" ] && kill "$BROWSER" 2>/dev/null
-    rm -rf "$LOG" "$READS" "$PROFILE" "$APP/src/routes/leak"
+    rm -rf "$LOG" "$READS" "$PROFILE" "$APP/src/routes/leak" "${NESTED:-}"
 }
 trap cleanup EXIT
 
@@ -66,12 +66,14 @@ fi
 
 echo "✓ kit build — adapter-node"
 
-# A page rendered as the application builds, in the process the plugin
-# compiles in: one Bryntime serves both, where a second copy said so.
+# A page rendered as the application builds, in SvelteKit's prerendering
+# worker, which loads the plugin with its configuration: one Bryntime serves
+# both, where a second copy said so.
 if grep -qF 'prerendered: 6' "$APP/build/prerendered/prerendered.html" 2>/dev/null; then
     echo "✓ kit prerender — a page rendered at build, by the plugin's own Bryntime"
 else
     echo "✗ kit prerender — $(grep -m1 -iE 'loaded twice|error' "$LOG" || echo 'no build/prerendered/prerendered.html')"
+    status=1
 fi
 
 (cd "$APP" && PORT=$PORT exec node build/index.js) >"$LOG" 2>&1 &
@@ -278,5 +280,66 @@ else
     echo "✗ kit leak — refused for another reason: $(grep -m1 -E 'Error' "$LOG" || tail -1 "$LOG")"
     status=1
 fi
+
+# The application of `tests/kit-nested`, installed as pnpm installs one, out of
+# reach of this repository's `node_modules`: Bryntime and Brylters under
+# Svelthon alone, which Node finds by its name from the application. Built,
+# prerendered, served and developed: asked by its own name, Bryntime was found
+# from nowhere there, built in beside the copy the prerendering worker's plugin
+# loaded, and looked for from the root by a dev server.
+NESTED=$(mktemp -d)
+cp -r tests/kit-nested/. "$NESTED"
+mkdir -p "$NESTED/node_modules/svelthon/node_modules" "$NESTED/node_modules/svelthon/src"
+
+for dep in node_modules/*; do
+    case ${dep#node_modules/} in
+        bryntime | brylters) ln -s "$PWD/$dep" "$NESTED/node_modules/svelthon/$dep" ;;
+        *) ln -s "$PWD/$dep" "$NESTED/$dep" ;;
+    esac
+done
+
+cp package.json "$NESTED/node_modules/svelthon/"
+cp -r src/lib "$NESTED/node_modules/svelthon/src/lib"
+
+nested() {
+    local what=$1 path=$2 expected=$3
+
+    if curl -s "$path" | grep -qF "$expected"; then
+        echo "✓ kit nested $what — $expected"
+    else
+        echo "✗ kit nested $what — $(grep -m1 -iE 'loaded twice|cannot find|error' "$LOG" || echo "not found: $expected")"
+        status=1
+    fi
+}
+
+if ! (cd "$NESTED" && exec node node_modules/vite/bin/vite.js build --logLevel error) >"$LOG" 2>&1; then
+    echo "✗ kit nested build — $(grep -m1 -iE 'loaded twice|cannot find|error' "$LOG" || tail -1 "$LOG")"
+    status=1
+elif ! grep -qF 'prerendered: 3' "$NESTED/build/prerendered/prerendered.html"; then
+    echo "✗ kit nested prerender — no prerendered: 3"
+    status=1
+else
+    echo "✓ kit nested build — Bryntime under Svelthon alone, a page prerendered: 3"
+
+    (cd "$NESTED" && PORT=$((PORT + 2)) exec node build/index.js) >"$LOG" 2>&1 &
+    SERVER=$!
+    for _ in $(seq 60); do
+        curl -s -o /dev/null "http://localhost:$((PORT + 2))/" && break
+        kill -0 "$SERVER" 2>/dev/null || break
+        sleep 0.25
+    done
+    nested server "http://localhost:$((PORT + 2))/" 'rendered: 3'
+    kill "$SERVER" 2>/dev/null
+    SERVER=
+fi
+
+(cd "$NESTED" && exec node node_modules/vite/bin/vite.js dev --port "$((PORT + 3))" --strictPort) >"$LOG" 2>&1 &
+DEV=$!
+for _ in $(seq 120); do
+    curl -s -o /dev/null "http://localhost:$((PORT + 3))/" && break
+    kill -0 "$DEV" 2>/dev/null || break
+    sleep 0.25
+done
+nested 'dev server' "http://localhost:$((PORT + 3))/" 'rendered: 3'
 
 exit $status

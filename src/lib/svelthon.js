@@ -2,7 +2,8 @@ import { TraceMap, traceSegment } from '@jridgewell/trace-mapping';
 import { createHash, randomBytes } from 'node:crypto';
 import { relative, resolve, dirname, basename } from 'node:path';
 import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as nodeModule from 'node:module';
 
 import {
     overMarkup,
@@ -1724,6 +1725,19 @@ const transportWrapper = (real, server) =>
 const KIT_SERVER = '$app/server';
 const REMOTE_SERVER = '\0svelthon-remote-server?';
 
+// Whether Node finds the Bryntime this plugin compiles with by its name from a
+// directory, as it will from a server built there. Node 22.14 and 23.2 tell
+// it (`findPackageJSON`); before them a server asks for it by its name.
+const runtimeNamedFrom = (root) => {
+    const find = nodeModule.findPackageJSON;
+
+    if (find === undefined) return true;
+    try {
+        return realpathSync(find('bryntime', pathToFileURL(resolve(root, 'package.json')))) === realpathSync(find('bryntime', import.meta.url));
+    } catch {
+        return false;
+    }
+};
 const remoteServer = (real) =>
     [
         `export * from ${JSON.stringify(real)};`,
@@ -2194,6 +2208,9 @@ export function svelthon(options = {}) {
     // (`configResolved`).
     let kitServer = KIT_SERVER;
 
+    let building = false;
+    let runtimeNamed;
+
     const fileOf = (path) => {
         if (preserveSymlinks) return path;
 
@@ -2422,10 +2439,13 @@ export function svelthon(options = {}) {
         // browser again; a linked checkout, which Vite transforms, was not.
         //
         // And one Bryntime for every importer, the one the plugin itself
-        // compiles with: left to Node on the server, whose cache hands the copy
-        // already loaded, and deduplicated for the browser. A second copy on
-        // the plugin's engine, a linked checkout Vite transformed for the page
-        // it rendered, kept a state of its own and followed nothing.
+        // compiles with: on the server left to Node, whose cache hands the copy
+        // already loaded, as Svelthon and Brylters, both transformed, find it
+        // from where they are installed (`resolveId` for a server built), and
+        // deduplicated for the browser alone: deduplicated, a dev server
+        // looked for it from the application's root. A second copy on the
+        // plugin's engine, a linked checkout Vite transformed for the page it
+        // rendered, kept a state of its own and followed nothing.
         //
         // And the dependency scanner handed what a Python script imports from
         // JavaScript rather than its Python (`pythonScan`), by Rolldown's
@@ -2443,8 +2463,8 @@ export function svelthon(options = {}) {
                 : { esbuildOptions: { plugins: [pythonScanEsbuild(found)] } };
 
             return {
-                ssr: { noExternal: ['svelthon'], external: ['bryntime'] },
-                resolve: { dedupe: ['bryntime'] },
+                ssr: { noExternal: ['svelthon', 'brylters'], external: ['bryntime'] },
+                environments: { client: { resolve: { dedupe: ['bryntime'] } } },
                 optimizeDeps: { ...scan, extensions: ['.py'] }
             };
         },
@@ -2456,6 +2476,7 @@ export function svelthon(options = {}) {
         // client's bundle without a word.
         configResolved(config) {
             routes = config.root;
+            building = config.command === 'build';
             preserveSymlinks = config.resolve?.preserveSymlinks === true;
 
             // Svelthon and the packages it brings served (`served`), added to
@@ -2496,7 +2517,21 @@ export function svelthon(options = {}) {
 
             if (svelte) holdCompile(svelte);
         },
-        resolveId(specifier, importer) {
+        resolveId(specifier, importer, options) {
+            // A server built asks Node for the plugin's Bryntime, the file the
+            // plugin loaded, as SvelteKit's prerendering worker loads the
+            // plugin with its configuration: by its name where Node finds that
+            // file by it from the application (`runtimeNamedFrom`), and through
+            // Svelthon elsewhere (`svelthon/bryntime`), which Node finds from
+            // the application and Bryntime from it. Asked by its name, a
+            // Bryntime installed under Svelthon alone was found from nowhere,
+            // built in beside the plugin's, and refused as a second copy.
+            if (specifier === 'bryntime' && building && options?.ssr) {
+                runtimeNamed ??= runtimeNamedFrom(routes);
+
+                return { id: runtimeNamed ? specifier : 'svelthon/bryntime', external: true };
+            }
+
             if (specifier === KIT_TRANSPORT) {
                 const wrapper = this.environment === undefined || this.environment.name === 'client' ? TRANSPORT_WRAPPER : TRANSPORT_SERVER_WRAPPER;
 

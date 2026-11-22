@@ -1,0 +1,8 @@
+{
+  "name": "svelthon-kit-nested",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "svelthon": "1.0.0"
+  }
+}
