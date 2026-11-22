@@ -594,6 +594,32 @@ test('an action’s answer JavaScript edited is, to Python, what JavaScript left
     expect([answer.label, shown(answer)]).toEqual(['from client', "dict:{'label': 'from client', 'pair': (1, 2), 'added': 1}"]);
 });
 
+// What JavaScript writes there may lead back to the answer, itself or through
+// another answer, and the server's answer may hold itself: Python reads the
+// same dict at the end of each cycle.
+test('an answer JavaScript linked back to itself is, to Python, one dict in a cycle', async () => {
+    const answered = async (name) => viaScript({ form: await routeActions(pyBind(actions), 'actions — transport')[name]({}) }).form;
+    const own = await answered('edited');
+    const first = await answered('edited');
+    const second = await answered('edited');
+    const looped = await answered('looped');
+
+    own.self = own;
+    first.peer = second;
+    second.peer = first;
+    looped.label = 'from client';
+
+    const read = (dict, key) => $B.$getitem(dict, key);
+    const [mine, one, theirs] = [pyBind(own), pyBind(first), pyBind(looped)];
+
+    expect([read(mine, 'self') === mine, read(read(one, 'peer'), 'peer') === one, read(theirs, 'me') === theirs, read(theirs, 'label')]).toEqual([
+        true,
+        true,
+        true,
+        'from client'
+    ]);
+});
+
 // `page.data` read from Python before the page has read its own `data`: the
 // same dict, as an argument and as an attribute Python reads off JavaScript's
 // `page`.

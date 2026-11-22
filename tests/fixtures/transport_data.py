@@ -193,6 +193,12 @@ def edited(event):
     return {"label": "from server", "pair": (1, 2), "other": 3}
 
 
+def looped(event):
+    answer = {"label": "from server"}
+    answer["me"] = answer
+    return answer
+
+
 # An instance whose reduction loses what was changed after it was made: what
 # the browser rebuilds says "kept", the original "changed".
 def changed():
@@ -277,7 +283,7 @@ def hooked():
     return {"loaded": Loaded(3), "upper": upper}
 
 
-actions = {"default": act, "lossy": lossy, "loaded": loaded, "edited": edited}
+actions = {"default": act, "lossy": lossy, "loaded": loaded, "edited": edited, "looped": looped}
 
 
 def remote_lossy():

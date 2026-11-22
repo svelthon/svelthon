@@ -3623,6 +3623,7 @@ const codec = {
             return forms.get(at);
         };
         const held = (at) => (forms.has(at) ? readBack(items[at][1], forms.get(at)) : items[at][1]);
+        let filling = false;
 
         return {
             value,
@@ -3632,22 +3633,30 @@ const codec = {
 
                     return [names[at], key, held(at), js];
                 }),
-            // With what JavaScript left of the plain object (`edits`): a value
-            // it wrote in its entry's place, an entry it deleted left out, a
-            // name it added after the entries.
+            // With what JavaScript left of the plain object (`edits`), written
+            // in the dict itself: a value it wrote in its entry's place, an
+            // entry it deleted taken out, a name it added after the entries. A
+            // value leading back to this answer, itself or through another
+            // one, reads the dict being written, as a cycle the server made
+            // reads the dict.
             dict: (left) => {
-                const writes = items.flatMap(([key], at) => {
-                    const edit = left?.entries[at];
+                if (filling) return dict;
 
-                    return edit === null ? [] : [[key, edit === undefined ? held(at) : pyBind(edit.value)]];
-                });
-                const added = left?.added ?? [];
+                filling = true;
+                try {
+                    items.forEach(([key, one], at) => {
+                        const edit = left?.entries[at];
 
-                writes.push(...added.map(([name, value]) => [name, pyBind(value)]));
+                        if (edit === null) delete view[names[at]];
+                        else if (edit !== undefined) pySetitem(dict, key, pyBind(edit.value));
+                        else if (held(at) !== one) pySetitem(dict, key, held(at));
+                    });
+                    for (const [name, value] of left?.added ?? []) pySetitem(dict, name, pyBind(value));
+                } finally {
+                    filling = false;
+                }
 
-                return added.length === 0 && writes.length === items.length && writes.every(([, one], at) => one === items[at][1])
-                    ? dict
-                    : pyDict(writes);
+                return dict;
             }
         };
     },
