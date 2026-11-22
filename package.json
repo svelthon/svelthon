@@ -65,6 +65,9 @@
     "@sveltejs/kit": "3.0.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@vitest/coverage-v8": "^4.1.11",
+    "brycomp": "file:../brycomp",
+    "brylters": "file:../brylters",
+    "bryntime": "file:../bryntime",
     "jsdom": "^29.1.1",
     "svelte": "5.57.1",
     "vite": "^8.2.1",
@@ -72,9 +75,9 @@
   },
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
-    "brycomp": "file:../brycomp",
-    "brylters": "file:../brylters",
-    "bryntime": "file:../bryntime",
+    "brycomp": "^0.6.0",
+    "brylters": "^0.5.0",
+    "bryntime": "^2.0.0",
     "esm-env": "^1.2.2"
   }
 }
