@@ -190,8 +190,11 @@ run time a door handed to a function refuses the write as well, with a
 `TypeError`, as an ES module's namespace does. A name is bound by assigning it,
 `global` included, and names made by computation are the keys of a dict of
 your own. Reading stays as Python has it: `globals()["count"]`, `.get`, `in`, a
-walk; and an attribute written on another module, `config.debug = True`, is
-that module's attribute, as before.
+walk; and another module writes a name the module's text has,
+`config.debug = True`, as before, but adds none, `setattr(config,
+"phantom", 1)`, and deletes none, both refused with an `AttributeError`:
+JavaScript imports the names of the text, and an added one read `undefined`
+there.
 
 | Python | Svelte 5 |
 |---|---|

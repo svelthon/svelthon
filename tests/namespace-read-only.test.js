@@ -11,6 +11,8 @@ import { preprocess } from 'svelte/compiler';
 import { python } from '../src/lib/svelthon.js';
 import { mount, flushSync } from './mounted.js';
 import NamespaceHanded from './fixtures/NamespaceHanded.svelte';
+import * as Target from './fixtures/attribute_target.py';
+import { writes } from './fixtures/attribute_writer.py';
 
 const FILE = 'src/App.svelte';
 const compiled = (script, markup = '<p>{x}</p>') =>
@@ -62,4 +64,17 @@ test('a namespace handed to a function that writes into it refuses the write at 
     flushSync();
 
     expect(target.querySelector('[data-k="view"]').textContent).toBe('refused|refused|1|1');
+});
+
+// And another module writes a name the text has on it, one only a function
+// binds among them, which JavaScript reads written; it adds none, which
+// JavaScript, importing the names of the text, read undefined where Python
+// read it, and deletes none.
+test('another module writes a name the text has, and adds or deletes none', () => {
+    const seen = writes();
+
+    expect(seen.slice(0, 3)).toEqual(['written', 5, 'written']);
+    expect(seen[3]).toMatch(/^refused: svelthon — `phantom` is no name of module `attribute_target`, whose names are those its text binds/);
+    expect(seen[4]).toMatch(/^refused: svelthon — `x` of module `attribute_target` is deleted by the module's own text/);
+    expect([seen[5], Target.x, Target.ready]).toEqual([false, 5, false]);
 });

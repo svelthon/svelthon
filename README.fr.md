@@ -195,8 +195,10 @@ l'exécution, une porte passée à une fonction refuse aussi l'écriture, par un
 `TypeError`, comme le namespace d'un module ES. Un nom se lie en l'affectant,
 `global` compris, et des noms faits par calcul sont les clés d'un dict à vous.
 La lecture reste celle de Python : `globals()["count"]`, `.get`, `in`, un
-parcours ; et un attribut écrit sur un autre module, `config.debug = True`,
-reste un attribut de ce module, comme avant.
+parcours ; et un autre module écrit un nom que le texte du module a,
+`config.debug = True`, comme avant, mais n'en ajoute aucun, `setattr(config,
+"phantom", 1)`, et n'en supprime aucun : refusé par une `AttributeError`, car JS
+importe les noms du texte, et un nom ajouté s'y lisait `undefined`.
 
 | Python | Svelte 5 |
 |---|---|
