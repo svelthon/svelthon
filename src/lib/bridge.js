@@ -286,9 +286,9 @@ const attribute = (value) => {
 };
 
 // What a Python value whose `__str__` raised stands for in an attribute: the
-// error, raised as the bridge raises one (`pyError`), when Svelte writes the
-// attribute, and never when an attribute written after it overrides it, in a
-// spread or by name.
+// error, raised as the bridge raises one (`pyError`), where an attribute
+// written after it may override it (`heldAttr`): when Svelte writes it, and
+// never when one does.
 class UnwrittenText {
     constructor(error) {
         this.error = error;
@@ -828,9 +828,20 @@ export const __brycomp_pybridge = {
     // callable its handler, an int and a str their own text, and a value of
     // JavaScript's as JavaScript writes it. Handed to Svelte as text, which it
     // writes as an attribute whatever property the element has of that name: a
-    // `translate` of "no" stays off. A text that raises raises where Svelte
-    // writes it (`UnwrittenText`), as Python's error.
+    // `translate` of "no" stays off. A text that raises raises as it is read,
+    // as Python's error: held to the write (`heldAttr`), it raised nowhere in
+    // a property Svelte sets to a boolean, `translate` or `draggable`, which
+    // took the object for true.
     attr(value) {
+        const text = __brycomp_pybridge.heldAttr(value);
+
+        if (text instanceof UnwrittenText) throw pyError(text.error);
+        return text;
+    },
+
+    // And where an attribute written after it may override it, a text that
+    // raises held to the write (`UnwrittenText`).
+    heldAttr(value) {
         if (value === null || typeof value !== 'object' || value === NONE || quietPyType(value) === undefined || callable(value)) return attribute(value);
 
         try {
@@ -1590,7 +1601,11 @@ export const __brycomp_pybridge = {
     // On a custom element (`custom`), a key of the boolean table, `hidden`
     // among them, is a property's, which Svelte sets to the value as it is, as
     // `open={…}` there.
-    spreadElement(value, event = (one) => pyEvent(one), grouped = false, custom = false) {
+    //
+    // A text that raises raises as it is read (`attr`), but under a key an
+    // attribute written after the spread may override, one of `later`, the
+    // names written after it, or any key where a spread follows (`true`).
+    spreadElement(value, event = (one) => pyEvent(one), grouped = false, custom = false, later = true) {
         if (value === null || value === undefined || value === NONE) return spreadOf(value);
 
         const read = spreadOf(value, (one) => one);
@@ -1610,7 +1625,9 @@ export const __brycomp_pybridge = {
             else if (wrapper === '__brycomp_truthy' && !custom && present) out[key] = __brycomp_pybridge.truthy(read[key]);
             else if (wrapper === '__brycomp_hidden' && !custom && present) out[key] = __brycomp_pybridge.hidden(read[key]);
             else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__brycomp_pybridge.bound(read[key]));
-            else if (!custom && textAttribute(key)) out[key] = __brycomp_pybridge.attr(read[key]);
+            else if (!custom && textAttribute(key)) {
+                out[key] = (later === true || later.includes(key.toLowerCase()) ? __brycomp_pybridge.heldAttr : __brycomp_pybridge.attr)(read[key]);
+            }
         }
 
         return out;
@@ -1624,14 +1641,15 @@ export const __brycomp_pybridge = {
     element(tag, wrapper, value, name) {
         if (customTag(tag) || (value === NONE && !unreflected(name))) return __brycomp_pybridge.bound(value);
         if (wrapper === '__brycomp_attr') return __brycomp_pybridge.attr(value);
+        if (wrapper === '__brycomp_heldAttr') return __brycomp_pybridge.heldAttr(value);
 
         return wrapper === '__brycomp_hidden' ? __brycomp_pybridge.hidden(value) : __brycomp_pybridge.truthy(value);
     },
 
     // And a spread there, the same question asked of each key it gives, of the
     // entries the spread read (`spreadEntries`).
-    elementSpread(tag, value, event, grouped = false) {
-        return __brycomp_pybridge.spreadElement(value, event, grouped, customTag(tag));
+    elementSpread(tag, value, event, grouped = false, later = true) {
+        return __brycomp_pybridge.spreadElement(value, event, grouped, customTag(tag), later);
     },
 
     // The entries a spread reads, each once, the values as they are: a fresh

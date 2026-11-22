@@ -4380,12 +4380,18 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // takes it as it is, as does a custom element's property, and one of a
         // `<svelte:element>` whose name makes a custom element as it renders
         // (`__brycomp_pybridge.element`).
+        //
+        // A text that raises raises as it is read, but where a spread written
+        // after it may override it (`__brycomp_heldAttr`).
         if (kind === '' && onElement(tag) && !custom(tag) && textAttribute(name)) {
+            const words = tagWords(markup, tag.start);
+            const wrapper = words.lastIndexOf(SPREAD_WORD) > words.indexOf(name.toLowerCase()) ? '__brycomp_heldAttr' : '__brycomp_attr';
+
             if (tag.element !== undefined) {
-                return `{${readThrough(inner, call(inner, '__brycomp_boxed', undefined, 'python'), (boxed) => `__brycomp_pybridge.element(${tag.element}, "__brycomp_attr", ${boxed}[0], ${JSON.stringify(name)})`)}}`;
+                return `{${readThrough(inner, call(inner, '__brycomp_boxed', undefined, 'python'), (boxed) => `__brycomp_pybridge.element(${tag.element}, "${wrapper}", ${boxed}[0], ${JSON.stringify(name)})`)}}`;
             }
 
-            return `{${unmemoized(inner, call(inner, '__brycomp_attr'))}}`;
+            return `{${unmemoized(inner, call(inner, wrapper))}}`;
         }
 
         const read = call(inner, '__brycomp_bound', undefined, kind);
@@ -4640,13 +4646,23 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // `bind:group` binds as the group reads it. On a child
                         // written in Python, each value is handed over as a
                         // prop written by name is, the Python value itself.
+                        //
+                        // On an element, a text one of its keys raised raises as
+                        // it is read, but for a key an attribute or a spread
+                        // written after it may override (`later`, the names
+                        // written after it, `__brycomp_spreadBefore`).
+                        const grouped = onElement(tag) && tagNames(markup, tag.start).has('bind:group');
+                        const after = tagWords(markup, end + 1);
+                        const later = after.includes(SPREAD_WORD) ? null : JSON.stringify(after);
                         const spreadWrapper = !onElement(tag)
                             ? '__brycomp_spread'
-                            : tagNames(markup, tag.start).has('bind:group')
-                              ? '__brycomp_spreadChoice'
-                              : custom(tag)
-                                ? '__brycomp_spreadCustom'
-                                : '__brycomp_spreadElement';
+                            : !grouped && custom(tag)
+                              ? '__brycomp_spreadCustom'
+                              : later !== null
+                                ? `__brycomp_spreadBefore(${later}, ${grouped ? 'True' : 'False'})`
+                                : grouped
+                                  ? '__brycomp_spreadChoice'
+                                  : '__brycomp_spreadElement';
 
                         // And on a `<svelte:element>` whose name is known as it
                         // renders, each key asked of that name, as an attribute
@@ -4683,7 +4699,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                                 : toPythonChild()
                                   ? `{...${unmemoized(spreadExpression, call(spreadExpression, '__brycomp_spreadPython', undefined, 'python'), false, 'spread')}}`
                                   : tag?.element !== undefined
-                                    ? `{...${readThrough(spreadExpression, call(spreadExpression, '__brycomp_spreadEntries', undefined, 'python'), (entries) => `__brycomp_pybridge.elementSpread(${tag.element}, ${entries}, __brycomp_event, ${spreadWrapper === '__brycomp_spreadChoice'})`)}}`
+                                    ? `{...${readThrough(spreadExpression, call(spreadExpression, '__brycomp_spreadEntries', undefined, 'python'), (entries) => `__brycomp_pybridge.elementSpread(${tag.element}, ${entries}, __brycomp_event, ${grouped}, ${later ?? 'true'})`)}}`
                                     : onElement(tag) || isComponent(tag)
                                       ? `{...${unmemoized(spreadExpression, call(spreadExpression, spreadWrapper), false, isComponent(tag) && 'spread')}}`
                                       : `{...${call(spreadExpression, spreadWrapper)}}`;

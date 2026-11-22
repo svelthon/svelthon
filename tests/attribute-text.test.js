@@ -6,6 +6,7 @@ import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import AttributeText from './fixtures/AttributeText.svelte';
 import AttributeTextRaises from './fixtures/AttributeTextRaises.svelte';
+import AttributeTextRaisesOn from './fixtures/AttributeTextRaisesOn.svelte';
 
 test.for([
     ['list', 'title', '[1, 2]'],
@@ -79,4 +80,29 @@ test('a value whose text raises raises its error where the attribute is written'
         mount(AttributeTextRaises, { target });
         flushSync();
     }).toThrow(/ValueError: caption unavailable/);
+});
+
+// On a property Svelte sets to a boolean too, `translate`, `draggable` or
+// `spellcheck`, which took the held error for true and raised nothing, by
+// name, in a spread, and on a `<svelte:element>`; but for one an attribute
+// written after it overrides.
+test.for([
+    ['translate', true],
+    ['draggable', true],
+    ['spellcheck', true],
+    ['spread', true],
+    ['spread-then-attribute', true],
+    ['element', true],
+    ['element-spread', true],
+    ['spread-overridden', false],
+    ['attribute-overridden', false]
+])('a text that raises on %s raises: %s', ([way, raises]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const mounted = () => {
+        mount(AttributeTextRaisesOn, { target, props: { way } });
+        flushSync();
+    };
+
+    if (raises) expect(mounted).toThrow(/ValueError: caption unavailable/);
+    else expect(mounted).not.toThrow();
 });

@@ -1072,8 +1072,10 @@ const ADAPTERS = {
     __brycomp_truthy: '__brycomp_pybridge.truthy',
     __brycomp_hidden: '__brycomp_pybridge.hidden',
     __brycomp_text: '__brycomp_pybridge.str',
-    // A value alone in an attribute of text, written as `__brycomp_text` writes it.
+    // A value alone in an attribute of text, written as `__brycomp_text` writes it,
+    // and one a spread written after it may override.
     __brycomp_attr: '__brycomp_pybridge.attr',
+    __brycomp_heldAttr: '__brycomp_pybridge.heldAttr',
     __brycomp_html: '__brycomp_pybridge.html',
     __brycomp_seq: '__brycomp_pybridge.seq',
     __brycomp_key: '__brycomp_pybridge.key',
@@ -1084,6 +1086,8 @@ const ADAPTERS = {
     __brycomp_spreadChoice: '(value) => __brycomp_pybridge.spreadElement(value, __brycomp_event, true)',
     // And on a custom element, whose properties take the values as they are.
     __brycomp_spreadCustom: '(value) => __brycomp_pybridge.spreadElement(value, __brycomp_event, false, true)',
+    // And one no spread follows, the names written after it (`later`).
+    __brycomp_spreadBefore: '(later, grouped) => (value) => __brycomp_pybridge.spreadElement(value, __brycomp_event, grouped, false, later)',
     __brycomp_spread: '__brycomp_pybridge.spread',
     __brycomp_spreadPython: '__brycomp_pybridge.spreadPython',
     // And on a `<svelte:element>`, the entries, which its name then reads.

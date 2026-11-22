@@ -6,6 +6,7 @@ import { test, expect } from 'vitest';
 import { render } from 'svelte/server';
 import AttributeText from './fixtures/AttributeText.svelte';
 import AttributeTextRaises from './fixtures/AttributeTextRaises.svelte';
+import AttributeTextRaisesOn from './fixtures/AttributeTextRaisesOn.svelte';
 
 // And as the browser does, a value an attribute written after it overrides is
 // never written, an enumerated attribute keeps its text, and a `defaultValue`,
@@ -36,4 +37,20 @@ test('a value alone in an attribute of text is written as Python writes it, on a
 
 test('a value whose text raises raises its error on a server, as Python’s', () => {
     expect(() => render(AttributeTextRaises).body).toThrow(/ValueError: caption unavailable/);
+});
+
+// The same ways as the browser's, one answer each.
+test.for([
+    ['translate', true],
+    ['spread', true],
+    ['spread-then-attribute', true],
+    ['element', true],
+    ['element-spread', true],
+    ['spread-overridden', false],
+    ['attribute-overridden', false]
+])('a text that raises on %s raises on a server: %s', ([way, raises]) => {
+    const rendered = () => render(AttributeTextRaisesOn, { props: { way } }).body;
+
+    if (raises) expect(rendered).toThrow(/ValueError: caption unavailable/);
+    else expect(rendered).not.toThrow();
 });
