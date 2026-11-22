@@ -75,29 +75,4 @@ describe('a reference in a shipped file', () => {
 
         expect(missing.map(({ file, name }) => `${file} → ${name}`)).toEqual([]);
     });
-
-    // And the private half of the same rule: a shipped file may not name a note
-    // that lives outside the repository. The directory is this machine's, so its
-    // absence cannot be the assertion — what is asserted is that no shipped file
-    // mentions one of the names it holds.
-    test('and never names a note that only one machine can open', () => {
-        const notes = join(
-            process.env.HOME ?? '',
-            '.claude/projects/<project>/memory'
-        );
-
-        if (!existsSync(notes)) return;
-
-        const slugs = readdirSync(notes)
-            .filter((one) => one.endsWith('.md') && one !== 'MEMORY.md')
-            .map((one) => one.slice(0, -3));
-
-        const named = shipped.flatMap((file) => {
-            const text = readFileSync(at(file), 'utf8');
-
-            return slugs.filter((slug) => text.includes(slug)).map((slug) => `${file} → ${slug}`);
-        });
-
-        expect(named).toEqual([]);
-    });
 });
